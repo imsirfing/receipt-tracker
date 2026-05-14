@@ -1,0 +1,11 @@
+.env
+gcp-creds.json
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+.DS_Store
+.venv/
+frontend/.env
+frontend/.env.local
