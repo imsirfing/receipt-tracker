@@ -18,9 +18,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    recurring_type_enum = sa.Enum("one_off", "ongoing", name="recurring_type_enum")
-    recurring_type_enum.create(op.get_bind(), checkfirst=True)
-
     op.create_table(
         "receipts",
         sa.Column("id", sa.UUID(), primary_key=True, nullable=False),
@@ -31,10 +28,11 @@ def upgrade() -> None:
         sa.Column("category_variable", sa.String(length=50), nullable=False),
         sa.Column(
             "recurring_type",
-            sa.Enum("one_off", "ongoing", name="recurring_type_enum", create_type=False),
+            sa.String(length=20),
             nullable=False,
             server_default="one_off",
         ),
+        sa.CheckConstraint("recurring_type IN ('one_off', 'ongoing')", name="ck_receipts_recurring_type"),
         sa.Column("is_reimbursed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("reimbursed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("raw_email_id", sa.String(length=255), nullable=False),
@@ -72,4 +70,3 @@ def downgrade() -> None:
     op.drop_index("idx_receipts_is_reimbursed", table_name="receipts")
     op.drop_index("idx_receipts_category_variable", table_name="receipts")
     op.drop_table("receipts")
-    sa.Enum(name="recurring_type_enum").drop(op.get_bind(), checkfirst=True)

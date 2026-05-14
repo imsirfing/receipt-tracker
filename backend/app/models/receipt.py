@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from enum import Enum as PyEnum
 from typing import List, Optional
-from sqlalchemy import String, Numeric, Date, Boolean, DateTime, ForeignKey, Enum, Index
+from sqlalchemy import String, Numeric, Date, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -21,9 +21,9 @@ class Receipt(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
     inferred_purpose: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     category_variable: Mapped[str] = mapped_column(String(50), nullable=False)
-    recurring_type: Mapped[RecurringType] = mapped_column(
-        Enum(RecurringType, name="recurring_type_enum"), 
-        default=RecurringType.ONE_OFF,
+    recurring_type: Mapped[str] = mapped_column(
+        String(20),
+        default=RecurringType.ONE_OFF.value,
         nullable=False
     )
     is_reimbursed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
