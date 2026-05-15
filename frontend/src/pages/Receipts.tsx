@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Pencil, RefreshCw, X } from "lucide-react";
-import { listReceipts, markReimbursed, Receipt, triggerIngest, updateReceipt } from "../api";
+import { Check, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
+import { listReceipts, markReimbursed, Receipt, updateReceipt } from "../api";
 
 const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
 
@@ -19,22 +20,6 @@ export default function ReceiptsPage() {
 
   const navigate = useNavigate();
   const [editing, setEditing] = useState<Receipt | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setSyncMsg(null);
-    try {
-      const result = await triggerIngest();
-      setSyncMsg(result.message);
-      await refresh();
-    } catch (e) {
-      setSyncMsg("Sync failed — check backend logs.");
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const refresh = async () => {
     setLoading(true);
@@ -43,6 +28,7 @@ export default function ReceiptsPage() {
       setReceipts(rows);
     } catch (e) {
       setError(String(e));
+      toast.error(String(e));
     } finally {
       setLoading(false);
     }
@@ -91,17 +77,7 @@ export default function ReceiptsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Receipts</h1>
-        <div className="flex items-center gap-3">
-          {syncMsg && <span className="text-sm text-slate-600">{syncMsg}</span>}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm px-3 py-1.5 rounded-lg"
-          >
-            <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-            {syncing ? "Syncing…" : "Sync Inbox"}
-          </button>
-        </div>
+        <div className="flex items-center gap-3" />
       </div>
 
       <div className="flex gap-3 mb-4">

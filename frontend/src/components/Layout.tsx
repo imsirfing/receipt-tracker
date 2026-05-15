@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { BarChart3, ClipboardList, Inbox, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "../auth-context";
-import { triggerIngest } from "../api";
+import { triggerIngest, listPending } from "../api";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
@@ -16,19 +17,23 @@ export default function Layout() {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    listPending().then(items => setPendingCount(items.length)).catch(() => {});
+  }, []);
 
   const handleSync = async () => {
     setSyncing(true);
-    setSyncMsg(null);
     try {
       const result = await triggerIngest();
-      setSyncMsg(`✓ ${result.processed ?? 0} processed`);
+      toast.success(`Synced — ${result.processed ?? 0} new receipts`);
+      setLastSync(new Date());
     } catch {
-      setSyncMsg("Sync failed");
+      toast.error("Sync failed — check backend logs");
     } finally {
       setSyncing(false);
-      setTimeout(() => setSyncMsg(null), 4000);
     }
   };
 
@@ -44,9 +49,9 @@ export default function Layout() {
           <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
           {syncing ? "Syncing…" : "Sync Inbox"}
         </button>
-        {syncMsg && (
-          <div className={`text-xs text-center mb-3 ${syncMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>
-            {syncMsg}
+        {lastSync && (
+          <div className="text-xs text-slate-400 text-center mt-1">
+            Last synced {lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
         <nav className="flex-1 space-y-1">
@@ -61,6 +66,11 @@ export default function Layout() {
                 }`}
               >
                 <Icon size={16} /> {label}
+                {label === "Review" && pendingCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {pendingCount}
+                  </span>
+                )}
               </Link>
             );
           })}

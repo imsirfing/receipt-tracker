@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { Toaster } from "sonner";
 import Layout from "./components/Layout";
 import Login from "./components/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
         <Route path="/chat" element={<ChatReport />} />
       </Route>
+      <Toaster position="bottom-right" richColors />
     </Routes>
   );
 }
