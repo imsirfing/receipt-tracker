@@ -10,3 +10,5 @@ dist/
 frontend/.env
 frontend/.env.local
 frontend/.env
+backend/gcp-creds.json
+docker-compose.override.yml

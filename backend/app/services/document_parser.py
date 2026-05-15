@@ -20,6 +20,8 @@ class ReceiptExtraction(BaseModel):
     date: str
     inferred_purpose: str
     recurring_type: str
+    payment_category: str
+    payment_detail: str
 
 
 SYSTEM_PROMPT = (
@@ -28,9 +30,18 @@ SYSTEM_PROMPT = (
     "- payee: clean legal entity name (e.g. 'Pacific Gas & Electric Co.', not 'PG&E Billing Dept').\n"
     "- amount: pure float, the total charged. Strip currency symbols and commas.\n"
     "- date: transaction or invoice date in YYYY-MM-DD.\n"
-    "- inferred_purpose: short phrase describing what was purchased or billed.\n"
+    "- inferred_purpose: 1-2 sentence explanation of what the payment is for and why it was made.\n"
     "- recurring_type: 'ongoing' for subscriptions, utilities, rent, insurance, "
     "or any recurring obligation; 'one_off' for isolated retail purchases.\n"
+    "- payment_category: broad category of the expense. Use one of: "
+    "'dining', 'groceries', 'utilities', 'rent/mortgage', 'insurance', 'healthcare', "
+    "'transportation', 'fuel', 'travel', 'lodging', 'entertainment', 'sports/recreation', "
+    "'education', 'childcare', 'subscriptions', 'software', 'office supplies', "
+    "'home/garden', 'clothing', 'professional services', 'legal', 'taxes', "
+    "'charitable giving', 'gifts', 'repairs/maintenance', 'construction', "
+    "'real estate', 'investment', 'banking/fees', 'other'.\n"
+    "- payment_detail: concise label for the specific line item or service "
+    "(e.g. 'Fall 2026 soccer registration', 'Monthly electricity bill', 'Annual domain renewal').\n"
     "Always call the `record_receipt` tool exactly once."
 )
 
@@ -54,15 +65,23 @@ EXTRACTION_TOOL = {
             },
             "inferred_purpose": {
                 "type": "string",
-                "description": "Short description of what the receipt is for.",
+                "description": "1-2 sentence explanation of what the payment is for and why it was made.",
             },
             "recurring_type": {
                 "type": "string",
                 "enum": ["ongoing", "one_off"],
                 "description": "'ongoing' for subscriptions/utilities/rent, otherwise 'one_off'.",
             },
+            "payment_category": {
+                "type": "string",
+                "description": "Broad expense category (e.g. 'dining', 'utilities', 'sports/recreation', 'insurance', etc.).",
+            },
+            "payment_detail": {
+                "type": "string",
+                "description": "Concise label for the specific line item or service (e.g. 'Fall 2026 soccer registration').",
+            },
         },
-        "required": ["payee", "amount", "date", "inferred_purpose", "recurring_type"],
+        "required": ["payee", "amount", "date", "inferred_purpose", "recurring_type", "payment_category", "payment_detail"],
     },
 }
 
@@ -80,7 +99,7 @@ def _load_gcs_bytes(gcs_uri: str) -> tuple[bytes, str]:
 
 
 class DocumentParser:
-    def __init__(self, model: str = "claude-3-5-sonnet-20241022") -> None:
+    def __init__(self, model: str = "claude-sonnet-4-5") -> None:
         self.model = model
         self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
@@ -90,6 +109,7 @@ class DocumentParser:
         *,
         mime_type: Optional[str] = None,
     ) -> ReceiptExtraction:
+        """Extract from a binary attachment (PDF or image) optionally loaded from GCS."""
         if isinstance(document, str):
             data, detected_mime = _load_gcs_bytes(document)
             mime_type = mime_type or detected_mime
@@ -125,6 +145,59 @@ class DocumentParser:
                     ],
                 }
             ],
+        )
+
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "record_receipt":
+                return ReceiptExtraction(**block.input)
+
+        raise RuntimeError("Claude response did not include a record_receipt tool call")
+
+    def extract_from_email(
+        self,
+        subject: str,
+        body_text: str,
+        attachments: Optional[list] = None,
+    ) -> ReceiptExtraction:
+        """Extract receipt data from email subject + body text, with optional attachment blobs.
+
+        Args:
+            subject: Email subject line.
+            body_text: Plain-text or HTML-stripped email body.
+            attachments: Optional list of (bytes, mime_type) tuples for attached files.
+        """
+        content: list = []
+
+        # Primary source: email text
+        content.append({
+            "type": "text",
+            "text": f"Subject: {subject}\n\n{body_text}",
+        })
+
+        # Supplement with attachments if present
+        if attachments:
+            for data, mime in attachments:
+                encoded = base64.standard_b64encode(data).decode("ascii")
+                if mime.startswith("image/"):
+                    content.append({
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": mime, "data": encoded},
+                    })
+                elif mime == "application/pdf":
+                    content.append({
+                        "type": "document",
+                        "source": {"type": "base64", "media_type": "application/pdf", "data": encoded},
+                    })
+
+        content.append({"type": "text", "text": "Extract the receipt fields from the above email."})
+
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            tools=[EXTRACTION_TOOL],
+            tool_choice={"type": "tool", "name": "record_receipt"},
+            messages=[{"role": "user", "content": content}],
         )
 
         for block in response.content:

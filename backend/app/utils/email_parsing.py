@@ -1,4 +1,4 @@
-ALLOWED_CATEGORIES = {"personal", "realestate", "traverse", "edgehill"}
+ALLOWED_CATEGORIES = {"personal", "realestate", "traverse", "edgehill", "trust"}
 
 
 def parse_sub_address_variable(to_header: str) -> str:

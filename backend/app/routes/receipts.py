@@ -32,6 +32,8 @@ class ReceiptOut(BaseModel):
     amount: float
     date: date
     inferred_purpose: Optional[str]
+    payment_category: Optional[str]
+    payment_detail: Optional[str]
     category_variable: str
     recurring_type: RecurringType
     is_reimbursed: bool

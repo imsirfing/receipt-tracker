@@ -93,6 +93,35 @@ def _collect_attachments(service, message_id: str, payload: dict) -> List[Attach
     return blobs
 
 
+def _extract_body_text(payload: dict) -> str:
+    """Recursively extract plain text (or HTML fallback) from a Gmail message payload."""
+    mime = (payload.get("mimeType") or "").lower()
+    body = payload.get("body") or {}
+    data = body.get("data", "")
+
+    if mime == "text/plain" and data:
+        return base64.urlsafe_b64decode(data.encode("utf-8")).decode("utf-8", errors="replace")
+
+    # Walk multipart parts, prefer text/plain, fall back to text/html
+    parts = payload.get("parts") or []
+    plain = ""
+    html = ""
+    for part in parts:
+        part_mime = (part.get("mimeType") or "").lower()
+        part_data = (part.get("body") or {}).get("data", "")
+        if part_mime == "text/plain" and part_data:
+            plain += base64.urlsafe_b64decode(part_data.encode("utf-8")).decode("utf-8", errors="replace")
+        elif part_mime == "text/html" and part_data:
+            raw_html = base64.urlsafe_b64decode(part_data.encode("utf-8")).decode("utf-8", errors="replace")
+            # Strip HTML tags for a rough plain-text version
+            import re
+            html += re.sub(r"<[^>]+>", " ", raw_html)
+        elif part_mime.startswith("multipart/"):
+            plain += _extract_body_text(part)
+
+    return plain or html or "(no body text)"
+
+
 def _upload_to_gcs(
     bucket: storage.Bucket, category: str, message_id: str, blob: AttachmentBlob
 ) -> str:
@@ -135,6 +164,8 @@ async def _persist_receipt(
         amount=extraction.amount,
         date=parsed_date,
         inferred_purpose=extraction.inferred_purpose,
+        payment_category=extraction.payment_category,
+        payment_detail=extraction.payment_detail,
         category_variable=category,
         recurring_type=recurring,
         raw_email_id=message_id,
@@ -174,26 +205,29 @@ async def process_message(
     headers = payload.get("headers", [])
 
     to_header = _extract_header(headers, "To") or _extract_header(headers, "Delivered-To") or ""
+    subject = _extract_header(headers, "Subject") or "(no subject)"
+
     try:
         category = parse_sub_address_variable(to_header)
     except ValueError as exc:
         logger.warning("skipping message %s: %s", message_id, exc)
         return None
 
+    # Extract email body text (always available)
+    body_text = _extract_body_text(payload)
+
+    # Collect any eligible attachments (PDF/images) as supplementary input
     blobs = _collect_attachments(service, message_id, payload)
-    if not blobs:
-        logger.info("no eligible attachments on message %s", message_id)
-        service.users().messages().modify(
-            userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
-        ).execute()
-        return None
 
-    extraction = parser.extract(blobs[0].data, mime_type=blobs[0].mime_type)
-
+    # Upload attachments to GCS if present
     uploaded: List[tuple[str, str]] = []
     for blob in blobs:
         gcs_uri = _upload_to_gcs(bucket, category, message_id, blob)
         uploaded.append((gcs_uri, blob.mime_type))
+
+    # Extract receipt fields from email body + any attachments
+    attachment_pairs = [(b.data, b.mime_type) for b in blobs]
+    extraction = parser.extract_from_email(subject, body_text, attachments=attachment_pairs or None)
 
     receipt = await _persist_receipt(
         session,
@@ -219,7 +253,7 @@ async def poll_inbox_once() -> int:
     service = _build_gmail_service()
     parser = DocumentParser()
 
-    query = "is:unread to:jamestinsley.receipts@gmail.com"
+    query = "is:unread to:jamestinsley.receipts"
     listing = service.users().messages().list(userId="me", q=query).execute()
     messages = listing.get("messages", [])
 

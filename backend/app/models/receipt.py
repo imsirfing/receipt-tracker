@@ -20,6 +20,8 @@ class Receipt(Base):
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     inferred_purpose: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    payment_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    payment_detail: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     category_variable: Mapped[str] = mapped_column(String(50), nullable=False)
     recurring_type: Mapped[str] = mapped_column(
         String(20),
