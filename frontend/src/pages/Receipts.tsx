@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
-import { listReceipts, markReimbursed, Receipt, updateReceipt } from "../api";
+import { Check, Pencil, RefreshCw, X } from "lucide-react";
+import { listReceipts, markReimbursed, Receipt, triggerIngest, updateReceipt } from "../api";
 
 type SortKey = "date" | "payee" | "amount" | "category_variable";
 
@@ -15,6 +15,22 @@ export default function ReceiptsPage() {
   const [sortDesc, setSortDesc] = useState(true);
 
   const [editing, setEditing] = useState<Receipt | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await triggerIngest();
+      setSyncMsg(result.message);
+      await refresh();
+    } catch (e) {
+      setSyncMsg("Sync failed — check backend logs.");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const refresh = async () => {
     setLoading(true);
@@ -68,7 +84,20 @@ export default function ReceiptsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Receipts</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Receipts</h1>
+        <div className="flex items-center gap-3">
+          {syncMsg && <span className="text-sm text-slate-600">{syncMsg}</span>}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm px-3 py-1.5 rounded-lg"
+          >
+            <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Syncing…" : "Sync Inbox"}
+          </button>
+        </div>
+      </div>
 
       <div className="flex gap-3 mb-4">
         <select
@@ -77,7 +106,7 @@ export default function ReceiptsPage() {
           onChange={(e) => setFilterCategory(e.target.value)}
         >
           <option value="">All categories</option>
-          {["personal", "realestate", "traverse", "edgehill"].map((c) => (
+          {["personal", "realestate", "traverse", "edgehill", "trust"].map((c) => (
             <option key={c} value={c}>
               {c}
             </option>

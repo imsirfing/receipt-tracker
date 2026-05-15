@@ -14,6 +14,16 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+export interface IngestResult {
+  processed: number;
+  message: string;
+}
+
+export const triggerIngest = async (): Promise<IngestResult> => {
+  const res = await api.post<IngestResult>("/api/ingest");
+  return res.data;
+};
+
 export interface Receipt {
   id: string;
   payee: string;
@@ -21,6 +31,8 @@ export interface Receipt {
   date: string;
   inferred_purpose: string | null;
   category_variable: string;
+  payment_category: string | null;
+  payment_detail: string | null;
   recurring_type: "ongoing" | "one_off";
   is_reimbursed: boolean;
   reimbursed_at: string | null;
