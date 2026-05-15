@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -47,6 +48,7 @@ class ReceiptUpdate(BaseModel):
     payee: Optional[str] = None
     amount: Optional[float] = None
     date: Optional[date] = None
+    category_variable: Optional[str] = None
     is_reimbursed: Optional[bool] = None
     reimbursed_at: Optional[datetime] = None
 
@@ -115,3 +117,37 @@ async def reimburse_receipt(
     await session.commit()
     await session.refresh(receipt)
     return ReceiptOut.model_validate(receipt)
+
+
+from google.cloud import storage as gcs_storage
+
+
+@router.get("/{receipt_id}/attachments/{attachment_id}/url")
+async def get_attachment_url(
+    receipt_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    result = await session.execute(
+        select(Attachment).where(
+            Attachment.id == attachment_id,
+            Attachment.receipt_id == receipt_id,
+        )
+    )
+    attachment = result.scalar_one_or_none()
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="attachment not found")
+
+    gcs_uri = attachment.gcs_uri
+    _, _, rest = gcs_uri.partition("gs://")
+    bucket_name, _, blob_path = rest.partition("/")
+
+    client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
+    blob = client.bucket(bucket_name).blob(blob_path)
+    url = blob.generate_signed_url(
+        expiration=timedelta(hours=1),
+        method="GET",
+        version="v4",
+    )
+    filename = blob_path.split("/")[-1]
+    return {"url": url, "file_type": attachment.file_type, "filename": filename}

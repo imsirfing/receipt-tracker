@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Check, Pencil, RefreshCw, X } from "lucide-react";
 import { listReceipts, markReimbursed, Receipt, triggerIngest, updateReceipt } from "../api";
+
+const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
 
 type SortKey = "date" | "payee" | "amount" | "category_variable";
 
@@ -14,6 +17,7 @@ export default function ReceiptsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDesc, setSortDesc] = useState(true);
 
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<Receipt | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
@@ -70,7 +74,8 @@ export default function ReceiptsPage() {
     }
   };
 
-  const handleReimburse = async (id: string) => {
+  const handleReimburse = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
     await markReimbursed(id);
     await refresh();
   };
@@ -106,7 +111,7 @@ export default function ReceiptsPage() {
           onChange={(e) => setFilterCategory(e.target.value)}
         >
           <option value="">All categories</option>
-          {["personal", "realestate", "traverse", "edgehill", "trust"].map((c) => (
+          {KNOWN_CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -141,6 +146,8 @@ export default function ReceiptsPage() {
                     {k} {sortKey === k ? (sortDesc ? "↓" : "↑") : ""}
                   </th>
                 ))}
+                <th className="text-left px-3 py-2">payment category</th>
+                <th className="text-left px-3 py-2">payment detail</th>
                 <th className="text-left px-3 py-2">recurring</th>
                 <th className="text-left px-3 py-2">reimbursed</th>
                 <th className="px-3 py-2"></th>
@@ -148,11 +155,23 @@ export default function ReceiptsPage() {
             </thead>
             <tbody>
               {filtered.map((r) => (
-                <tr key={r.id} className="border-t border-slate-100">
+                <tr
+                  key={r.id}
+                  onClick={() => navigate(`/receipts/${r.id}`)}
+                  className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${r.category_variable === "uncategorized" ? "bg-amber-50 hover:bg-amber-100" : ""}`}
+                >
                   <td className="px-3 py-2">{r.date}</td>
                   <td className="px-3 py-2">{r.payee}</td>
                   <td className="px-3 py-2">${Number(r.amount).toFixed(2)}</td>
-                  <td className="px-3 py-2">{r.category_variable}</td>
+                  <td className="px-3 py-2">
+                    {r.category_variable === "uncategorized" ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">uncategorized</span>
+                    ) : (
+                      r.category_variable
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500 text-xs">{r.payment_category ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-500 text-xs max-w-xs truncate" title={r.payment_detail ?? ""}>{r.payment_detail ?? "—"}</td>
                   <td className="px-3 py-2">{r.recurring_type}</td>
                   <td className="px-3 py-2">
                     {r.is_reimbursed ? (
@@ -164,14 +183,14 @@ export default function ReceiptsPage() {
                   <td className="px-3 py-2 flex gap-2 justify-end">
                     {!r.is_reimbursed && (
                       <button
-                        onClick={() => handleReimburse(r.id)}
+                        onClick={(e) => handleReimburse(e, r.id)}
                         className="inline-flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded"
                       >
                         <Check size={12} /> reimburse
                       </button>
                     )}
                     <button
-                      onClick={() => setEditing(r)}
+                      onClick={(e) => { e.stopPropagation(); setEditing(r); }}
                       className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
                     >
                       <Pencil size={12} /> edit
@@ -201,12 +220,29 @@ function EditModal({
   const [payee, setPayee] = useState(receipt.payee);
   const [amount, setAmount] = useState(String(receipt.amount));
   const [date, setDate] = useState(receipt.date);
+
+  // Category state — detect if current value is outside known list
+  const isCustomInitial = !KNOWN_CATEGORIES.includes(receipt.category_variable);
+  const [categorySelect, setCategorySelect] = useState(
+    isCustomInitial ? "__custom__" : receipt.category_variable
+  );
+  const [customCategory, setCustomCategory] = useState(
+    isCustomInitial ? receipt.category_variable : ""
+  );
+  const effectiveCategory =
+    categorySelect === "__custom__" ? customCategory.trim() : categorySelect;
+
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     setSaving(true);
     try {
-      await onSave({ payee, amount: Number(amount), date });
+      await onSave({
+        payee,
+        amount: Number(amount),
+        date,
+        category_variable: effectiveCategory || receipt.category_variable,
+      });
     } finally {
       setSaving(false);
     }
@@ -239,7 +275,7 @@ function EditModal({
             className="border rounded px-2 py-1 w-full mt-1"
           />
         </label>
-        <label className="block text-sm mb-4">
+        <label className="block text-sm mb-2">
           Date
           <input
             type="date"
@@ -248,7 +284,29 @@ function EditModal({
             className="border rounded px-2 py-1 w-full mt-1"
           />
         </label>
-        <div className="flex justify-end gap-2">
+        <label className="block text-sm mb-1">
+          Category
+          <select
+            value={categorySelect}
+            onChange={(e) => setCategorySelect(e.target.value)}
+            className="border rounded px-2 py-1 w-full mt-1"
+          >
+            {KNOWN_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+            <option value="__custom__">+ new category…</option>
+          </select>
+        </label>
+        {categorySelect === "__custom__" && (
+          <input
+            value={customCategory}
+            onChange={(e) => setCustomCategory(e.target.value)}
+            placeholder="e.g. medical"
+            className="border rounded px-2 py-1 w-full mb-2 text-sm"
+            autoFocus
+          />
+        )}
+        <div className="flex justify-end gap-2 mt-4">
           <button onClick={onClose} className="px-3 py-1 text-sm">
             Cancel
           </button>

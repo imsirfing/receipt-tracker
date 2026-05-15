@@ -59,7 +59,60 @@ export const markReimbursed = async (id: string) => {
   return res.data;
 };
 
+export const getReceipt = async (id: string): Promise<Receipt> => {
+  const res = await api.get<Receipt>(`/api/receipts/${id}`);
+  return res.data;
+};
+
+export interface AttachmentUrl {
+  url: string;
+  file_type: string;
+  filename: string;
+}
+
+export const getAttachmentUrl = async (receiptId: string, attachmentId: string): Promise<AttachmentUrl> => {
+  const res = await api.get<AttachmentUrl>(`/api/receipts/${receiptId}/attachments/${attachmentId}/url`);
+  return res.data;
+};
+
 export const requestReport = async (message: string): Promise<{ pdf_url: string }> => {
   const res = await api.post<{ pdf_url: string }>("/api/chat/report", { message });
+  return res.data;
+};
+
+export interface PendingEmail {
+  id: string;
+  gmail_message_id: string;
+  subject: string;
+  from_address: string;
+  body_preview: string;
+  category_variable: string;
+  skip_reason: string;
+  received_date: string | null;
+  created_at: string;
+}
+
+export interface ConvertRequest {
+  payee: string;
+  amount: number;
+  date: string;
+  category_variable: string;
+  recurring_type: string;
+  payment_category?: string;
+  payment_detail?: string;
+  inferred_purpose?: string;
+}
+
+export const listPending = async (): Promise<PendingEmail[]> => {
+  const res = await api.get<PendingEmail[]>("/api/pending");
+  return res.data;
+};
+
+export const dismissPending = async (id: string): Promise<void> => {
+  await api.delete(`/api/pending/${id}`);
+};
+
+export const convertPending = async (id: string, body: ConvertRequest): Promise<Receipt> => {
+  const res = await api.post<Receipt>(`/api/pending/${id}/convert`, body);
   return res.data;
 };

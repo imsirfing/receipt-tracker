@@ -23,8 +23,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import AsyncSessionLocal
+from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, RecurringType
-from app.services.document_parser import DocumentParser, ReceiptExtraction
+from app.services.document_parser import DocumentParser, NotAReceiptError, ReceiptExtraction
 from app.utils.email_parsing import parse_sub_address_variable
 
 logger = logging.getLogger(__name__)
@@ -187,6 +188,41 @@ async def _persist_receipt(
     return receipt
 
 
+async def _persist_pending_email(
+    session: AsyncSession,
+    *,
+    message_id: str,
+    subject: str,
+    from_address: str,
+    body_preview: str,
+    category: str,
+    skip_reason: str,
+    received_date: Optional[str] = None,
+) -> bool:
+    """Store a non-receipt email for manual review. Returns False if already stored."""
+    existing = await session.execute(
+        select(PendingEmail).where(PendingEmail.gmail_message_id == message_id)
+    )
+    if existing.scalar_one_or_none() is not None:
+        logger.info("pending email %s already exists, skipping", message_id)
+        return False
+
+    session.add(
+        PendingEmail(
+            id=uuid.uuid4(),
+            gmail_message_id=message_id,
+            subject=subject,
+            from_address=from_address,
+            body_preview=body_preview[:2000],
+            category_variable=category,
+            skip_reason=skip_reason,
+            received_date=received_date,
+        )
+    )
+    await session.commit()
+    return True
+
+
 async def process_message(
     service,
     bucket: storage.Bucket,
@@ -206,6 +242,23 @@ async def process_message(
 
     to_header = _extract_header(headers, "To") or _extract_header(headers, "Delivered-To") or ""
     subject = _extract_header(headers, "Subject") or "(no subject)"
+    from_address = _extract_header(headers, "From") or ""
+    date_header = _extract_header(headers, "Date") or ""
+
+    # Parse received date from Date header (best-effort YYYY-MM-DD)
+    received_date: Optional[str] = None
+    if date_header:
+        import email.utils
+        parsed_tuple = email.utils.parsedate(date_header)
+        if parsed_tuple:
+            import time
+            try:
+                from datetime import date as _date
+                ts = time.mktime(parsed_tuple)
+                from datetime import datetime as _dt
+                received_date = _dt.fromtimestamp(ts).strftime("%Y-%m-%d")
+            except Exception:
+                pass
 
     try:
         category = parse_sub_address_variable(to_header)
@@ -213,21 +266,36 @@ async def process_message(
         logger.warning("skipping message %s: %s", message_id, exc)
         return None
 
-    # Extract email body text (always available)
-    body_text = _extract_body_text(payload)
-
-    # Collect any eligible attachments (PDF/images) as supplementary input
+    body_text = _extract_body_text(payload)[:15_000]  # cap at ~4k tokens to stay well within limits
     blobs = _collect_attachments(service, message_id, payload)
+    attachment_pairs = [(b.data, b.mime_type) for b in blobs]
 
-    # Upload attachments to GCS if present
+    try:
+        extraction = parser.extract_from_email(
+            subject, body_text, attachments=attachment_pairs or None
+        )
+    except NotAReceiptError as exc:
+        logger.info("message %s is not a receipt (%s), storing for review", message_id, exc.reason)
+        await _persist_pending_email(
+            session,
+            message_id=message_id,
+            subject=subject,
+            from_address=from_address,
+            body_preview=body_text,
+            category=category,
+            skip_reason=exc.reason,
+            received_date=received_date,
+        )
+        service.users().messages().modify(
+            userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
+        ).execute()
+        return None
+
+    # Only upload to GCS after confirming it's a real receipt
     uploaded: List[tuple[str, str]] = []
     for blob in blobs:
         gcs_uri = _upload_to_gcs(bucket, category, message_id, blob)
         uploaded.append((gcs_uri, blob.mime_type))
-
-    # Extract receipt fields from email body + any attachments
-    attachment_pairs = [(b.data, b.mime_type) for b in blobs]
-    extraction = parser.extract_from_email(subject, body_text, attachments=attachment_pairs or None)
 
     receipt = await _persist_receipt(
         session,

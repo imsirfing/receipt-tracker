@@ -14,6 +14,13 @@ from google.cloud import storage
 from pydantic import BaseModel
 
 
+class NotAReceiptError(Exception):
+    """Raised when the LLM determines the email contains no financial transaction."""
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
 class ReceiptExtraction(BaseModel):
     payee: str
     amount: float
@@ -86,6 +93,26 @@ EXTRACTION_TOOL = {
 }
 
 
+SKIP_TOOL = {
+    "name": "skip_email",
+    "description": (
+        "Call this when the email does NOT contain a financial transaction or receipt "
+        "(e.g. marketing email, shipping notification with no dollar amount, newsletter). "
+        "Do NOT call record_receipt if calling this tool."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Brief reason why this is not a receipt (e.g. 'No monetary amount found', 'Marketing email with no transaction').",
+            }
+        },
+        "required": ["reason"],
+    },
+}
+
+
 def _load_gcs_bytes(gcs_uri: str) -> tuple[bytes, str]:
     if not gcs_uri.startswith("gs://"):
         raise ValueError(f"expected gs:// URI, got {gcs_uri!r}")
@@ -134,8 +161,8 @@ class DocumentParser:
             model=self.model,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
-            tools=[EXTRACTION_TOOL],
-            tool_choice={"type": "tool", "name": "record_receipt"},
+            tools=[EXTRACTION_TOOL, SKIP_TOOL],
+            tool_choice={"type": "auto"},
             messages=[
                 {
                     "role": "user",
@@ -148,10 +175,12 @@ class DocumentParser:
         )
 
         for block in response.content:
-            if getattr(block, "type", None) == "tool_use" and block.name == "record_receipt":
-                return ReceiptExtraction(**block.input)
-
-        raise RuntimeError("Claude response did not include a record_receipt tool call")
+            if getattr(block, "type", None) == "tool_use":
+                if block.name == "record_receipt":
+                    return ReceiptExtraction(**block.input)
+                elif block.name == "skip_email":
+                    raise NotAReceiptError(block.input.get("reason", "No receipt data found"))
+        raise RuntimeError("Claude response did not include a tool call")
 
     def extract_from_email(
         self,
@@ -195,13 +224,15 @@ class DocumentParser:
             model=self.model,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
-            tools=[EXTRACTION_TOOL],
-            tool_choice={"type": "tool", "name": "record_receipt"},
+            tools=[EXTRACTION_TOOL, SKIP_TOOL],
+            tool_choice={"type": "auto"},
             messages=[{"role": "user", "content": content}],
         )
 
         for block in response.content:
-            if getattr(block, "type", None) == "tool_use" and block.name == "record_receipt":
-                return ReceiptExtraction(**block.input)
-
-        raise RuntimeError("Claude response did not include a record_receipt tool call")
+            if getattr(block, "type", None) == "tool_use":
+                if block.name == "record_receipt":
+                    return ReceiptExtraction(**block.input)
+                elif block.name == "skip_email":
+                    raise NotAReceiptError(block.input.get("reason", "No receipt data found"))
+        raise RuntimeError("Claude response did not include a tool call")

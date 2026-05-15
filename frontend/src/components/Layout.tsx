@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, LogOut, MessageSquare, Receipt } from "lucide-react";
+import { BarChart3, ClipboardList, Inbox, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
 import { useAuth } from "../auth-context";
+import { triggerIngest } from "../api";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
+  { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/review", label: "Review", icon: ClipboardList },
   { to: "/receipts", label: "Receipts", icon: Receipt },
   { to: "/chat", label: "Chat report", icon: MessageSquare },
 ];
@@ -11,11 +15,40 @@ const nav = [
 export default function Layout() {
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const result = await triggerIngest();
+      setSyncMsg(`✓ ${result.processed ?? 0} processed`);
+    } catch {
+      setSyncMsg("Sync failed");
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 4000);
+    }
+  };
 
   return (
     <div className="min-h-screen flex bg-slate-50">
       <aside className="w-60 bg-white border-r border-slate-200 p-4 flex flex-col">
-        <div className="text-lg font-semibold mb-6 text-indigo-700">Receipts</div>
+        <div className="text-lg font-semibold mb-4 text-indigo-700">Receipts</div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex items-center justify-center gap-2 w-full mb-5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium transition-colors"
+        >
+          <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Syncing…" : "Sync Inbox"}
+        </button>
+        {syncMsg && (
+          <div className={`text-xs text-center mb-3 ${syncMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>
+            {syncMsg}
+          </div>
+        )}
         <nav className="flex-1 space-y-1">
           {nav.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
