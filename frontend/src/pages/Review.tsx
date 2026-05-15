@@ -100,8 +100,10 @@ export default function ReviewPage() {
       </div>
 
       {items.length === 0 ? (
-        <div className="text-center py-16 text-slate-500 text-sm">
-          All clear — nothing to review 🎉
+        <div className="text-center py-16 text-slate-400">
+          <div className="text-4xl mb-3">✅</div>
+          <div className="font-medium text-slate-600 mb-1">Nothing to review</div>
+          <div className="text-sm">All caught up — new uncertain emails will appear here.</div>
         </div>
       ) : (
         <div className="space-y-4">

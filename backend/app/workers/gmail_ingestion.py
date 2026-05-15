@@ -138,7 +138,7 @@ async def _persist_receipt(
     message_id: str,
     category: str,
     extraction: ReceiptExtraction,
-    gcs_uris: List[tuple[str, str]],
+    gcs_uris: List[tuple[str, str, Optional[str]]],
 ) -> Optional[Receipt]:
     existing = await session.execute(
         select(Receipt).where(Receipt.raw_email_id == message_id)
@@ -174,13 +174,14 @@ async def _persist_receipt(
     session.add(receipt)
     await session.flush()
 
-    for uri, mime in gcs_uris:
+    for uri, mime, fname in gcs_uris:
         session.add(
             Attachment(
                 id=uuid.uuid4(),
                 receipt_id=receipt.id,
                 gcs_uri=uri,
                 file_type=mime,
+                filename=fname,
             )
         )
 
@@ -292,10 +293,10 @@ async def process_message(
         return None
 
     # Only upload to GCS after confirming it's a real receipt
-    uploaded: List[tuple[str, str]] = []
+    uploaded: List[tuple[str, str, Optional[str]]] = []
     for blob in blobs:
         gcs_uri = _upload_to_gcs(bucket, category, message_id, blob)
-        uploaded.append((gcs_uri, blob.mime_type))
+        uploaded.append((gcs_uri, blob.mime_type, blob.filename or None))
 
     receipt = await _persist_receipt(
         session,

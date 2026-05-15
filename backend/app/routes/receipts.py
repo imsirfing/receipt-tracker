@@ -22,6 +22,7 @@ class AttachmentOut(BaseModel):
     id: uuid.UUID
     gcs_uri: str
     file_type: str
+    filename: Optional[str] = None
     created_at: datetime
 
 
@@ -39,6 +40,9 @@ class ReceiptOut(BaseModel):
     recurring_type: RecurringType
     is_reimbursed: bool
     reimbursed_at: Optional[datetime]
+    notes: Optional[str] = None
+    is_tax_deductible: bool = False
+    reimbursement_owner: Optional[str] = None
     raw_email_id: str
     created_at: datetime
     attachments: List[AttachmentOut] = []
@@ -51,6 +55,9 @@ class ReceiptUpdate(BaseModel):
     category_variable: Optional[str] = None
     is_reimbursed: Optional[bool] = None
     reimbursed_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    is_tax_deductible: Optional[bool] = None
+    reimbursement_owner: Optional[str] = None
 
 
 @router.get("", response_model=List[ReceiptOut])

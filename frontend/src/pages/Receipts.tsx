@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Pencil, X } from "lucide-react";
+import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
 import { listReceipts, markReimbursed, Receipt, updateReceipt } from "../api";
 
@@ -106,9 +107,7 @@ export default function ReceiptsPage() {
       </div>
 
       {error && <div className="text-red-600 mb-3">{error}</div>}
-      {loading ? (
-        <div className="text-slate-500">Loading…</div>
-      ) : (
+      {
         <div className="overflow-x-auto bg-white rounded-xl shadow-sm border border-slate-200">
           <table className="w-full text-sm">
             <thead className="bg-slate-100 text-slate-600">
@@ -130,7 +129,16 @@ export default function ReceiptsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {loading ? (
+                [...Array(6)].map((_, i) => <SkeletonRow key={i} />)
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                    <div className="text-3xl mb-2">🧾</div>
+                    <div className="text-sm">No receipts found. Try adjusting your filter or syncing the inbox.</div>
+                  </td>
+                </tr>
+              ) : filtered.map((r) => (
                 <tr
                   key={r.id}
                   onClick={() => navigate(`/receipts/${r.id}`)}
@@ -177,7 +185,7 @@ export default function ReceiptsPage() {
             </tbody>
           </table>
         </div>
-      )}
+      }
 
       {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} />}
     </div>

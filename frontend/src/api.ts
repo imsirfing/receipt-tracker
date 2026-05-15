@@ -39,6 +39,9 @@ export interface Receipt {
   raw_email_id: string;
   created_at: string;
   attachments: Array<{ id: string; gcs_uri: string; file_type: string }>;
+  notes?: string | null;
+  is_tax_deductible?: boolean;
+  reimbursement_owner?: string | null;
 }
 
 export const listReceipts = async (params?: {

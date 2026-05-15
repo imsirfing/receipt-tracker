@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listReceipts, Receipt } from "../api";
+import { SkeletonCard } from "../components/Skeleton";
 
 export default function InboxPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -24,8 +25,18 @@ export default function InboxPage() {
       <h1 className="text-2xl font-semibold mb-6">Inbox</h1>
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
-      {loading && <div className="text-slate-500">Loading…</div>}
 
+      {loading ? (
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : receipts.length === 0 ? (
+        <div className="text-center py-16 text-slate-400">
+          <div className="text-4xl mb-3">📭</div>
+          <div className="font-medium text-slate-600 mb-1">Inbox is empty</div>
+          <div className="text-sm">Hit Sync Inbox in the sidebar to pull in new receipts.</div>
+        </div>
+      ) : (
       <div className="flex flex-col gap-2">
         {receipts.map((r) => {
           const uncategorized = r.category_variable === "uncategorized";
@@ -64,10 +75,8 @@ export default function InboxPage() {
             </div>
           );
         })}
-        {!loading && receipts.length === 0 && (
-          <div className="text-slate-500 text-center py-12">No receipts yet.</div>
-        )}
       </div>
+      )}
     </div>
   );
 }
