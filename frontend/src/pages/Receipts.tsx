@@ -5,6 +5,8 @@ import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
 import { listReceipts, markReimbursed, Receipt, updateReceipt } from "../api";
 
+const PAGE_SIZE = 50;
+
 const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
 
 type SortKey = "date" | "payee" | "amount" | "category_variable";
@@ -13,6 +15,8 @@ export default function ReceiptsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
 
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterReimbursed, setFilterReimbursed] = useState<string>("");
@@ -25,8 +29,9 @@ export default function ReceiptsPage() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const rows = await listReceipts();
-      setReceipts(rows);
+      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE);
+      setReceipts(data.items);
+      setTotal(data.total);
     } catch (e) {
       setError(String(e));
       toast.error(String(e));
@@ -37,7 +42,7 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [page]);
 
   const filtered = useMemo(() => {
     let rows = receipts.slice();
@@ -85,7 +90,7 @@ export default function ReceiptsPage() {
         <select
           className="border rounded px-2 py-1 text-sm"
           value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
+          onChange={(e) => { setFilterCategory(e.target.value); setPage(0); }}
         >
           <option value="">All categories</option>
           {KNOWN_CATEGORIES.map((c) => (
@@ -98,7 +103,7 @@ export default function ReceiptsPage() {
         <select
           className="border rounded px-2 py-1 text-sm"
           value={filterReimbursed}
-          onChange={(e) => setFilterReimbursed(e.target.value)}
+          onChange={(e) => { setFilterReimbursed(e.target.value); setPage(0); }}
         >
           <option value="">Any status</option>
           <option value="false">Unreimbursed</option>
@@ -186,6 +191,30 @@ export default function ReceiptsPage() {
           </table>
         </div>
       }
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white rounded-b-xl">
+          <div className="text-sm text-slate-500">
+            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              ← Prev
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={(page + 1) * PAGE_SIZE >= total}
+              className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
 
       {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} />}
     </div>

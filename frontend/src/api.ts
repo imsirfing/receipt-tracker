@@ -44,13 +44,17 @@ export interface Receipt {
   reimbursement_owner?: string | null;
 }
 
-export const listReceipts = async (params?: {
-  category?: string;
-  is_reimbursed?: boolean;
-}): Promise<Receipt[]> => {
-  const res = await api.get<Receipt[]>("/api/receipts", { params });
+export interface ReceiptListResponse {
+  items: Receipt[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export async function listReceipts(limit = 50, offset = 0): Promise<ReceiptListResponse> {
+  const res = await api.get<ReceiptListResponse>(`/api/receipts?limit=${limit}&offset=${offset}`);
   return res.data;
-};
+}
 
 export const updateReceipt = async (id: string, patch: Partial<Receipt>) => {
   const res = await api.patch<Receipt>(`/api/receipts/${id}`, patch);

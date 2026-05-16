@@ -11,9 +11,9 @@ export default function InboxPage() {
 
   useEffect(() => {
     listReceipts()
-      .then((rows) => {
+      .then((data) => {
         // Sort newest first
-        rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+        const rows = data.items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
         setReceipts(rows);
       })
       .catch((e) => setError(String(e)))

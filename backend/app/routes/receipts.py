@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import csv
+import io
 import os
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -48,6 +51,13 @@ class ReceiptOut(BaseModel):
     attachments: List[AttachmentOut] = []
 
 
+class ReceiptListOut(BaseModel):
+    items: List[ReceiptOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class ReceiptUpdate(BaseModel):
     payee: Optional[str] = None
     amount: Optional[float] = None
@@ -60,22 +70,62 @@ class ReceiptUpdate(BaseModel):
     reimbursement_owner: Optional[str] = None
 
 
-@router.get("", response_model=List[ReceiptOut])
+@router.get("", response_model=ReceiptListOut)
 async def list_receipts(
     category: Optional[str] = Query(None),
     is_reimbursed: Optional[bool] = Query(None),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
-) -> List[ReceiptOut]:
+) -> ReceiptListOut:
     stmt = select(Receipt)
     if category is not None:
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(is_reimbursed))
+
+    count_result = await session.execute(select(func.count()).select_from(Receipt))
+    total = count_result.scalar()
+
     stmt = stmt.order_by(Receipt.date.desc()).limit(limit).offset(offset)
     result = await session.execute(stmt)
-    return [ReceiptOut.model_validate(r) for r in result.scalars().all()]
+    receipts = [ReceiptOut.model_validate(r) for r in result.scalars().all()]
+    return ReceiptListOut(items=receipts, total=total, limit=limit, offset=offset)
+
+
+@router.get("/export")
+async def export_receipts_csv(
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Receipt).order_by(Receipt.date.desc())
+    )
+    receipts = result.scalars().all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "id", "payee", "amount", "date", "category", "payment_category",
+        "payment_detail", "purpose", "recurring_type", "is_reimbursed",
+        "is_tax_deductible", "reimbursement_owner", "notes", "created_at"
+    ])
+    for r in receipts:
+        writer.writerow([
+            str(r.id), r.payee, str(r.amount), str(r.date),
+            r.category_variable or "", r.payment_category or "",
+            r.payment_detail or "", r.inferred_purpose or "",
+            r.recurring_type or "", r.is_reimbursed,
+            getattr(r, "is_tax_deductible", False),
+            getattr(r, "reimbursement_owner", "") or "",
+            getattr(r, "notes", "") or "",
+            str(r.created_at)
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=receipts.csv"}
+    )
 
 
 @router.get("/{receipt_id}", response_model=ReceiptOut)
