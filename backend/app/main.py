@@ -26,7 +26,11 @@ app = FastAPI(
 # Enforce secure CORS parameters for Cloud Run to dashboard communication pipelines
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict this array explicitly inside deployment environment configurations
+    allow_origins=[
+        "https://receipt-tracker-frontend-156776765895.us-central1.run.app",
+        "http://localhost:5173",
+        "http://localhost:8080",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
