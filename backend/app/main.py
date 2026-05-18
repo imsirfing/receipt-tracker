@@ -27,6 +27,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://receipt-tracker-frontend-goxuldyofq-uc.a.run.app",
         "https://receipt-tracker-frontend-156776765895.us-central1.run.app",
         "http://localhost:5173",
         "http://localhost:8080",
