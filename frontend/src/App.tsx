@@ -14,25 +14,27 @@ const ReceiptDetailPage = lazy(() => import("./pages/ReceiptDetail"));
 
 export default function App() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen text-slate-400 text-sm">Loading…</div>}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/review" element={<ReviewPage />} />
-          <Route path="/receipts" element={<ReceiptsPage />} />
-          <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
-          <Route path="/chat" element={<ChatReport />} />
-        </Route>
-        <Toaster position="bottom-right" richColors />
-      </Routes>
-    </Suspense>
+    <>
+      <Suspense fallback={<div className="flex items-center justify-center h-screen text-slate-400 text-sm">Loading…</div>}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/review" element={<ReviewPage />} />
+            <Route path="/receipts" element={<ReceiptsPage />} />
+            <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
+            <Route path="/chat" element={<ChatReport />} />
+          </Route>
+        </Routes>
+      </Suspense>
+      <Toaster position="bottom-right" richColors />
+    </>
   );
 }
