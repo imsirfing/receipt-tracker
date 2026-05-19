@@ -14,13 +14,26 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-export interface IngestResult {
-  processed: number;
+export interface IngestStarted {
+  status: string;
   message: string;
 }
 
-export const triggerIngest = async (): Promise<IngestResult> => {
-  const res = await api.post<IngestResult>("/api/ingest");
+export interface IngestStatus {
+  running: boolean;
+  started_at: string | null;
+  last_completed_at: string | null;
+  last_processed: number | null;
+  last_error: string | null;
+}
+
+export const triggerIngest = async (): Promise<IngestStarted> => {
+  const res = await api.post<IngestStarted>("/api/ingest");
+  return res.data;
+};
+
+export const getIngestStatus = async (): Promise<IngestStatus> => {
+  const res = await api.get<IngestStatus>("/api/ingest/status");
   return res.data;
 };
 

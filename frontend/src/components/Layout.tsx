@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { BarChart3, ClipboardList, Inbox, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
-import { triggerIngest, listPending } from "../api";
+import { triggerIngest, getIngestStatus, listPending } from "../api";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
@@ -25,11 +25,39 @@ export default function Layout() {
   }, []);
 
   const handleSync = async () => {
+    if (syncing) return;
     setSyncing(true);
     try {
-      const result = await triggerIngest();
-      toast.success(`Synced — ${result.processed ?? 0} new receipts`);
-      setLastSync(new Date());
+      await triggerIngest();
+      // Poll for completion
+      let attempts = 0;
+      const maxAttempts = 120; // 2 minutes of polling
+      await new Promise<void>((resolve) => {
+        const poll = setInterval(async () => {
+          attempts++;
+          try {
+            const status = await getIngestStatus();
+            if (!status.running) {
+              clearInterval(poll);
+              if (status.last_error) {
+                toast.error(`Sync error: ${status.last_error}`);
+              } else {
+                toast.success(`Synced — ${status.last_processed ?? 0} new receipt${status.last_processed !== 1 ? "s" : ""}`);
+                setLastSync(new Date());
+              }
+              resolve();
+            } else if (attempts >= maxAttempts) {
+              clearInterval(poll);
+              toast.error("Sync timed out — check back in a moment");
+              resolve();
+            }
+          } catch {
+            clearInterval(poll);
+            toast.error("Lost contact with backend during sync");
+            resolve();
+          }
+        }, 1000);
+      });
     } catch {
       toast.error("Sync failed — check backend logs");
     } finally {

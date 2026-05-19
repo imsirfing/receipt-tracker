@@ -340,11 +340,39 @@ async def poll_inbox_once() -> int:
     processed = 0
     async with AsyncSessionLocal() as session:
         for meta in messages:
+            msg_id = meta.get("id", "")
+            # Skip messages already tombstoned as pending (parse error, not a receipt, etc.)
+            existing_pending = await session.execute(
+                select(PendingEmail).where(PendingEmail.gmail_message_id == msg_id)
+            )
+            if existing_pending.scalar_one_or_none() is not None:
+                logger.debug("skipping already-pending message %s", msg_id)
+                continue
+            # Skip messages already saved as receipts
+            existing_receipt = await session.execute(
+                select(Receipt).where(Receipt.raw_email_id == msg_id)
+            )
+            if existing_receipt.scalar_one_or_none() is not None:
+                logger.debug("skipping already-processed receipt %s", msg_id)
+                continue
             try:
                 if await process_message(service, bucket, parser, session, meta):
                     processed += 1
-            except Exception:
-                logger.exception("failed to process message %s", meta.get("id"))
+            except Exception as exc:
+                logger.exception("failed to process message %s", msg_id)
+                # Tombstone it so we don't retry on every sync
+                try:
+                    await _persist_pending_email(
+                        session,
+                        message_id=msg_id,
+                        subject="(parse error)",
+                        from_address="",
+                        body_preview="",
+                        category="uncategorized",
+                        skip_reason=f"unhandled error: {exc}",
+                    )
+                except Exception:
+                    logger.exception("failed to tombstone message %s", msg_id)
     return processed
 
 
