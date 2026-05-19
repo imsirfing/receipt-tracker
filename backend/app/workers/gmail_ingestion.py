@@ -214,7 +214,7 @@ async def _persist_pending_email(
             gmail_message_id=message_id,
             subject=subject,
             from_address=from_address,
-            body_preview=body_preview[:2000],
+            body_preview=body_preview[:10_000],
             category_variable=category,
             skip_reason=skip_reason,
             received_date=received_date,

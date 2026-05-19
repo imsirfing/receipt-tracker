@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PendingEmail,
   ConvertRequest,
@@ -6,6 +6,30 @@ import {
   dismissPending,
   convertPending,
 } from "../api";
+
+function EmailBodyPreview({ body }: { body: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preRef = useRef<HTMLPreElement>(null);
+  const COLLAPSE_HEIGHT = 120; // px
+
+  return (
+    <div className="mt-3">
+      <pre
+        ref={preRef}
+        className="text-xs text-slate-600 bg-slate-50 rounded-lg p-3 whitespace-pre-wrap break-words font-mono overflow-y-auto transition-all"
+        style={{ maxHeight: expanded ? "480px" : `${COLLAPSE_HEIGHT}px` }}
+      >
+        {body}
+      </pre>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="mt-1 text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
+      >
+        {expanded ? "Show less ▲" : "Show more ▼"}
+      </button>
+    </div>
+  );
+}
 
 const KNOWN_CATEGORIES = [
   "personal",
@@ -131,10 +155,7 @@ export default function ReviewPage() {
       )}
 
       {!isParseError && item.body_preview && (
-        <pre className="mt-3 text-xs text-slate-600 bg-slate-50 rounded-lg p-3 overflow-hidden whitespace-pre-wrap break-words max-h-24 font-mono">
-          {item.body_preview.slice(0, 300)}
-          {item.body_preview.length > 300 && "…"}
-        </pre>
+        <EmailBodyPreview body={item.body_preview} />
       )}
 
       <div className="mt-4 flex gap-2">

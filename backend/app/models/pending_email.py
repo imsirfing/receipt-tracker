@@ -20,7 +20,7 @@ class PendingEmail(Base):
     gmail_message_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     subject: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     from_address: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    body_preview: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
+    body_preview: Mapped[str] = mapped_column(Text, nullable=False, default="")
     category_variable: Mapped[str] = mapped_column(String(50), nullable=False, default="uncategorized")
     skip_reason: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     received_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
