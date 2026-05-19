@@ -29,7 +29,8 @@ export default function ReceiptsPage() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE);
+      const reimbursedParam = filterReimbursed === "true" ? true : filterReimbursed === "false" ? false : undefined;
+      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE, filterCategory || undefined, reimbursedParam);
       setReceipts(data.items);
       setTotal(data.total);
     } catch (e) {
@@ -42,12 +43,10 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     refresh();
-  }, [page]);
+  }, [page, filterCategory, filterReimbursed]);
 
   const filtered = useMemo(() => {
     let rows = receipts.slice();
-    if (filterCategory) rows = rows.filter((r) => r.category_variable === filterCategory);
-    if (filterReimbursed) rows = rows.filter((r) => String(r.is_reimbursed) === filterReimbursed);
     rows.sort((a, b) => {
       const av = a[sortKey] as string | number;
       const bv = b[sortKey] as string | number;
@@ -56,7 +55,7 @@ export default function ReceiptsPage() {
       return 0;
     });
     return rows;
-  }, [receipts, filterCategory, filterReimbursed, sortKey, sortDesc]);
+  }, [receipts, sortKey, sortDesc]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDesc(!sortDesc);

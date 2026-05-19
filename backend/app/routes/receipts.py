@@ -84,7 +84,8 @@ async def list_receipts(
     if is_reimbursed is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(is_reimbursed))
 
-    count_result = await session.execute(select(func.count()).select_from(Receipt))
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    count_result = await session.execute(count_stmt)
     total = count_result.scalar()
 
     stmt = stmt.order_by(Receipt.date.desc()).limit(limit).offset(offset)

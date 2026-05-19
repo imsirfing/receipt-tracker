@@ -56,4 +56,5 @@ jobs:
           --platform managed \
           --allow-unauthenticated \
           --add-cloudsql-instances $CLOUDSQL_INSTANCE \
-          --env-vars-file /tmp/env-vars.yaml
+          --env-vars-file /tmp/env-vars.yaml \
+          --min-instances=1

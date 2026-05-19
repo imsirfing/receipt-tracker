@@ -51,8 +51,16 @@ export interface ReceiptListResponse {
   offset: number;
 }
 
-export async function listReceipts(limit = 50, offset = 0): Promise<ReceiptListResponse> {
-  const res = await api.get<ReceiptListResponse>(`/api/receipts?limit=${limit}&offset=${offset}`);
+export async function listReceipts(
+  limit = 50,
+  offset = 0,
+  category?: string,
+  isReimbursed?: boolean,
+): Promise<ReceiptListResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (category) params.set("category", category);
+  if (isReimbursed !== undefined) params.set("is_reimbursed", String(isReimbursed));
+  const res = await api.get<ReceiptListResponse>(`/api/receipts?${params.toString()}`);
   return res.data;
 }
 
