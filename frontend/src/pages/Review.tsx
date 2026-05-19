@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   PendingEmail,
   ConvertRequest,
@@ -25,7 +26,9 @@ function EmailBodyPreview({ body }: { body: string }) {
         onClick={() => setExpanded(e => !e)}
         className="mt-1 text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
       >
-        {expanded ? "Show less ▲" : "Show more ▼"}
+        <span className="flex items-center gap-1">
+          {expanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show more</>}
+        </span>
       </button>
     </div>
   );
