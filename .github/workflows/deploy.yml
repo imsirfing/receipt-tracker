@@ -48,7 +48,7 @@ jobs:
         DATABASE_URL: "${{ secrets.DATABASE_URL }}"
         EOF
 
-    - name: Deploy to Cloud Run
+    - name: Deploy Backend to Cloud Run
       run: |
         gcloud run deploy $SERVICE_NAME \
           --image gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} \
@@ -57,4 +57,18 @@ jobs:
           --allow-unauthenticated \
           --add-cloudsql-instances $CLOUDSQL_INSTANCE \
           --env-vars-file /tmp/env-vars.yaml \
+          --min-instances=1
+
+    - name: Build and Push Frontend Container
+      run: |
+        docker build -t gcr.io/$PROJECT_ID/receipt-tracker-frontend:${{ github.sha }} ./frontend
+        docker push gcr.io/$PROJECT_ID/receipt-tracker-frontend:${{ github.sha }}
+
+    - name: Deploy Frontend to Cloud Run
+      run: |
+        gcloud run deploy receipt-tracker-frontend \
+          --image gcr.io/$PROJECT_ID/receipt-tracker-frontend:${{ github.sha }} \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
           --min-instances=1
