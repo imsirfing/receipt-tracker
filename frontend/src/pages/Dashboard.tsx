@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [monthsBack, setMonthsBack] = useState(12);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,11 +36,17 @@ export default function Dashboard() {
   }, []);
 
   const filteredReceipts = useMemo(() => {
-    if (monthsBack >= 9999) return receipts;
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - monthsBack);
-    return receipts.filter(r => new Date(r.date) >= cutoff);
-  }, [receipts, monthsBack]);
+    let result = receipts;
+    if (monthsBack < 9999) {
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - monthsBack);
+      result = result.filter(r => new Date(r.date) >= cutoff);
+    }
+    if (selectedCategory !== "all") {
+      result = result.filter(r => r.category_variable === selectedCategory);
+    }
+    return result;
+  }, [receipts, monthsBack, selectedCategory]);
 
   const byCategory = useMemo(() => {
     return CATEGORIES.map((cat) => ({
@@ -113,19 +120,33 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <select
-          value={monthsBack}
-          onChange={e => setMonthsBack(Number(e.target.value))}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value={3}>Last 3 months</option>
-          <option value={6}>Last 6 months</option>
-          <option value={12}>Last 12 months</option>
-          <option value={24}>Last 24 months</option>
-          <option value={9999}>All time</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedCategory}
+            onChange={e => setSelectedCategory(e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            style={{ color: selectedCategory === "all" ? undefined : categoryColor(selectedCategory) }}
+          >
+            <option value="all">All categories</option>
+            {CATEGORIES.filter(c => c !== "uncategorized").map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+            <option value="uncategorized">uncategorized</option>
+          </select>
+          <select
+            value={monthsBack}
+            onChange={e => setMonthsBack(Number(e.target.value))}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value={3}>Last 3 months</option>
+            <option value={6}>Last 6 months</option>
+            <option value={12}>Last 12 months</option>
+            <option value={24}>Last 24 months</option>
+            <option value={9999}>All time</option>
+          </select>
+        </div>
       </div>
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
@@ -148,6 +169,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {selectedCategory === "all" && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-sm font-medium text-slate-700 mb-3">Spend by category</div>
@@ -188,9 +210,12 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
       </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
-        <div className="text-sm font-medium text-slate-700 mb-3">Top payees</div>
+        <div className="text-sm font-medium text-slate-700 mb-3">
+          Top payees{selectedCategory !== "all" ? ` · ${selectedCategory}` : ""}
+        </div>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={topPayees} layout="vertical" margin={{ left: 8, right: 16 }}>
             <XAxis type="number" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
@@ -201,6 +226,7 @@ export default function Dashboard() {
         </ResponsiveContainer>
       </div>
 
+      {selectedCategory === "all" && (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <div className="text-sm font-medium text-slate-700 mb-3">Unreimbursed by category</div>
         <ResponsiveContainer width="100%" height={180}>
@@ -216,9 +242,12 @@ export default function Dashboard() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-6 mb-6">
-        <div className="font-medium mb-3">Spend by month</div>
+        <div className="font-medium mb-3">
+          Spend by month{selectedCategory !== "all" ? ` · ${selectedCategory}` : ""}
+        </div>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={monthlyData}>
             <CartesianGrid strokeDasharray="3 3" />
