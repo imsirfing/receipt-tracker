@@ -191,7 +191,7 @@ export default function ReceiptsPage() {
         </div>
       }
 
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-white rounded-b-xl">
           <div className="text-sm text-slate-500">
             Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
