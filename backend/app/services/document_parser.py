@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import os
+from datetime import date
 from typing import Optional
 
 from anthropic import Anthropic
@@ -36,7 +37,8 @@ SYSTEM_PROMPT = (
     "Rules:\n"
     "- payee: clean legal entity name (e.g. 'Pacific Gas & Electric Co.', not 'PG&E Billing Dept').\n"
     "- amount: pure float, the total charged. Strip currency symbols and commas.\n"
-    "- date: transaction or invoice date in YYYY-MM-DD.\n"
+    "- date: transaction or invoice date in YYYY-MM-DD. "
+    "If the year is missing or ambiguous, assume the current year.\n"
     "- inferred_purpose: 1-2 sentence explanation of what the payment is for and why it was made.\n"
     "- recurring_type: 'ongoing' for subscriptions, utilities, rent, insurance, "
     "or any recurring obligation; 'one_off' for isolated retail purchases.\n"
@@ -196,6 +198,12 @@ class DocumentParser:
             attachments: Optional list of (bytes, mime_type) tuples for attached files.
         """
         content: list = []
+
+        # Anchor Claude to today's date so ambiguous dates (e.g. "5/19" with no year) resolve correctly
+        content.append({
+            "type": "text",
+            "text": f"Today's date: {date.today().isoformat()}",
+        })
 
         # Primary source: email text
         content.append({
