@@ -314,7 +314,7 @@ async def process_message(
 
 
 async def poll_inbox_once() -> int:
-    """Process all currently-unread receipt emails. Returns count processed."""
+    """Process all receipt emails (read or unread). Returns count of newly processed receipts."""
     bucket_name = os.environ["GCS_BUCKET_NAME"]
     storage_client = storage.Client(project=os.getenv("GCP_PROJECT_ID"))
     bucket = storage_client.bucket(bucket_name)
@@ -322,9 +322,20 @@ async def poll_inbox_once() -> int:
     service = _build_gmail_service()
     parser = DocumentParser()
 
-    query = "is:unread to:jamestinsley.receipts"
-    listing = service.users().messages().list(userId="me", q=query).execute()
-    messages = listing.get("messages", [])
+    # Do NOT filter by is:unread — emails already opened in Gmail would be missed.
+    # Deduplication is handled by the raw_email_id uniqueness check in _persist_receipt.
+    query = "to:jamestinsley.receipts"
+    messages: List[dict] = []
+    page_token: Optional[str] = None
+    while True:
+        kwargs: dict = {"userId": "me", "q": query, "maxResults": 500}
+        if page_token:
+            kwargs["pageToken"] = page_token
+        listing = service.users().messages().list(**kwargs).execute()
+        messages.extend(listing.get("messages", []))
+        page_token = listing.get("nextPageToken")
+        if not page_token:
+            break
 
     processed = 0
     async with AsyncSessionLocal() as session:
