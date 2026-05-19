@@ -339,38 +339,55 @@ async def poll_inbox_once() -> int:
 
     processed = 0
     async with AsyncSessionLocal() as session:
+        # Batch-load all known IDs upfront — one query each, then in-memory lookups.
+        # This avoids N DB round-trips (and N LLM calls) for already-processed messages.
+        receipt_rows = await session.execute(select(Receipt.raw_email_id))
+        known_receipt_ids: set[str] = {r[0] for r in receipt_rows if r[0]}
+
+        pending_rows = await session.execute(select(PendingEmail.gmail_message_id))
+        known_pending_ids: set[str] = {r[0] for r in pending_rows if r[0]}
+
+        logger.info(
+            "inbox: %d messages | already ingested: %d receipts + %d pending/tombstoned — processing %d new",
+            len(messages),
+            len(known_receipt_ids),
+            len(known_pending_ids),
+            len([m for m in messages if m.get("id") not in known_receipt_ids and m.get("id") not in known_pending_ids]),
+        )
+
         for meta in messages:
             msg_id = meta.get("id", "")
-            # Skip messages already tombstoned as pending (parse error, not a receipt, etc.)
-            existing_pending = await session.execute(
-                select(PendingEmail).where(PendingEmail.gmail_message_id == msg_id)
-            )
-            if existing_pending.scalar_one_or_none() is not None:
-                logger.debug("skipping already-pending message %s", msg_id)
-                continue
-            # Skip messages already saved as receipts
-            existing_receipt = await session.execute(
-                select(Receipt).where(Receipt.raw_email_id == msg_id)
-            )
-            if existing_receipt.scalar_one_or_none() is not None:
-                logger.debug("skipping already-processed receipt %s", msg_id)
+            if msg_id in known_receipt_ids or msg_id in known_pending_ids:
                 continue
             try:
                 if await process_message(service, bucket, parser, session, meta):
                     processed += 1
             except Exception as exc:
                 logger.exception("failed to process message %s", msg_id)
-                # Tombstone it so we don't retry on every sync
+                # Fetch real subject/from for the tombstone so it's reviewable
+                subject = "(parse error)"
+                from_address = ""
+                try:
+                    msg_meta = service.users().messages().get(
+                        userId="me", messageId=msg_id, format="metadata",
+                        metadataHeaders=["Subject", "From"]
+                    ).execute()
+                    headers = msg_meta.get("payload", {}).get("headers", [])
+                    subject = _extract_header(headers, "Subject") or "(parse error)"
+                    from_address = _extract_header(headers, "From") or ""
+                except Exception:
+                    logger.warning("could not fetch headers for tombstone %s", msg_id)
                 try:
                     await _persist_pending_email(
                         session,
                         message_id=msg_id,
-                        subject="(parse error)",
-                        from_address="",
+                        subject=subject,
+                        from_address=from_address,
                         body_preview="",
                         category="uncategorized",
-                        skip_reason=f"unhandled error: {exc}",
+                        skip_reason=f"parse error: {exc}",
                     )
+                    known_pending_ids.add(msg_id)  # prevent duplicate tombstones in same run
                 except Exception:
                     logger.exception("failed to tombstone message %s", msg_id)
     return processed

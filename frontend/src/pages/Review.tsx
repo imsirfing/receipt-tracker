@@ -82,19 +82,92 @@ export default function ReviewPage() {
     setModal((prev) => prev ? { ...prev, form: { ...prev.form, ...patch } } : prev);
   };
 
+  const parseErrors = items.filter(i => i.skip_reason.startsWith("parse error:"));
+  const reviewable = items.filter(i => !i.skip_reason.startsWith("parse error:"));
+
   if (loading) {
     return (
       <div className="text-slate-500 text-sm mt-8 text-center">Loading…</div>
     );
   }
 
+  const renderItem = (item: PendingEmail, isParseError = false) => (
+    <div
+      key={item.id}
+      className={`bg-white rounded-xl shadow-sm border p-5 ${
+        isParseError ? "border-red-200" : "border-slate-200"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-base font-semibold text-slate-900 truncate">
+            {item.subject}
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {item.from_address}
+            {item.received_date && (
+              <span className="ml-2">· {item.received_date}</span>
+            )}
+          </p>
+          {isParseError && (
+            <p className="text-xs font-mono text-slate-400 mt-0.5">ID: {item.gmail_message_id}</p>
+          )}
+        </div>
+        {isParseError ? (
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
+            parse error
+          </span>
+        ) : (
+          <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
+            {item.category_variable}
+          </span>
+        )}
+      </div>
+
+      {item.skip_reason && (
+        <p className="mt-2 text-xs text-slate-400 italic">
+          {isParseError ? item.skip_reason : `Claude: ${item.skip_reason}`}
+        </p>
+      )}
+
+      {!isParseError && item.body_preview && (
+        <pre className="mt-3 text-xs text-slate-600 bg-slate-50 rounded-lg p-3 overflow-hidden whitespace-pre-wrap break-words max-h-24 font-mono">
+          {item.body_preview.slice(0, 300)}
+          {item.body_preview.length > 300 && "…"}
+        </pre>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        {!isParseError && (
+          <button
+            onClick={() => openModal(item)}
+            className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Create Receipt
+          </button>
+        )}
+        <button
+          onClick={() => handleDismiss(item.id)}
+          className="px-3 py-1.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-semibold text-slate-800">Review</h1>
-        {items.length > 0 && (
+        {reviewable.length > 0 && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
-            {items.length} pending
+            {reviewable.length} pending
+          </span>
+        )}
+        {parseErrors.length > 0 && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+            {parseErrors.length} parse error{parseErrors.length !== 1 ? "s" : ""}
           </span>
         )}
       </div>
@@ -107,55 +180,17 @@ export default function ReviewPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white rounded-xl shadow-sm border border-slate-200 p-5"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-base font-semibold text-slate-900 truncate">
-                    {item.subject}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {item.from_address}
-                    {item.received_date && (
-                      <span className="ml-2">· {item.received_date}</span>
-                    )}
-                  </p>
-                </div>
-                <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">
-                  {item.category_variable}
-                </span>
-              </div>
-
-              {item.skip_reason && (
-                <p className="mt-2 text-xs text-slate-400 italic">
-                  Claude: {item.skip_reason}
-                </p>
-              )}
-
-              <pre className="mt-3 text-xs text-slate-600 bg-slate-50 rounded-lg p-3 overflow-hidden whitespace-pre-wrap break-words max-h-24 font-mono">
-                {item.body_preview.slice(0, 300)}
-                {item.body_preview.length > 300 && "…"}
-              </pre>
-
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={() => openModal(item)}
-                  className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  Create Receipt
-                </button>
-                <button
-                  onClick={() => handleDismiss(item.id)}
-                  className="px-3 py-1.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  Dismiss
-                </button>
+          {reviewable.map((item) => renderItem(item, false))}
+          {parseErrors.length > 0 && reviewable.length > 0 && (
+            <div className="pt-2 pb-1">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 border-t border-slate-200" />
+                <span className="text-xs text-slate-400">parse errors</span>
+                <div className="flex-1 border-t border-slate-200" />
               </div>
             </div>
-          ))}
+          )}
+          {parseErrors.map((item) => renderItem(item, true))}
         </div>
       )}
 
