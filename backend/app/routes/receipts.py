@@ -4,7 +4,7 @@ import csv
 import io
 import os
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date as _Date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -35,7 +35,7 @@ class ReceiptOut(BaseModel):
     id: uuid.UUID
     payee: str
     amount: float
-    date: date
+    date: _Date
     inferred_purpose: Optional[str]
     payment_category: Optional[str]
     payment_detail: Optional[str]
@@ -61,7 +61,7 @@ class ReceiptListOut(BaseModel):
 class ReceiptUpdate(BaseModel):
     payee: Optional[str] = None
     amount: Optional[float] = None
-    date: Optional[date] = None
+    date: Optional[_Date] = None
     category_variable: Optional[str] = None
     is_reimbursed: Optional[bool] = None
     reimbursed_at: Optional[datetime] = None
