@@ -1,8 +1,8 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum as PyEnum
-from typing import List, Optional
-from sqlalchemy import String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text
+from typing import Any, Dict, List, Optional
+from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -34,7 +34,12 @@ class Receipt(Base):
     is_reimbursed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     reimbursed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     raw_email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual", server_default="manual")
+    ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Database relationships
     attachments: Mapped[List["Attachment"]] = relationship(
@@ -46,7 +51,57 @@ class Receipt(Base):
         Index("idx_receipts_category_variable", "category_variable"),
         Index("idx_receipts_is_reimbursed", "is_reimbursed"),
         Index("idx_receipts_raw_email_id", "raw_email_id"),
+        Index("idx_receipts_deleted_at", "deleted_at"),
     )
+
+    def to_audit_dict(self) -> Dict[str, Any]:
+        """Serialize receipt fields to a JSON-safe dict for audit snapshots."""
+        return {
+            "id": str(self.id),
+            "payee": self.payee,
+            "amount": float(self.amount) if self.amount is not None else None,
+            "date": self.date.isoformat() if self.date else None,
+            "inferred_purpose": self.inferred_purpose,
+            "payment_category": self.payment_category,
+            "payment_detail": self.payment_detail,
+            "category_variable": self.category_variable,
+            "recurring_type": self.recurring_type,
+            "notes": self.notes,
+            "is_tax_deductible": self.is_tax_deductible,
+            "reimbursement_owner": self.reimbursement_owner,
+            "is_reimbursed": self.is_reimbursed,
+            "reimbursed_at": self.reimbursed_at.isoformat() if self.reimbursed_at else None,
+            "raw_email_id": self.raw_email_id,
+            "source": self.source,
+            "ingested_at": self.ingested_at.isoformat() if self.ingested_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+class ReceiptAuditLog(Base):
+    """Append-only log of all state-changing events on receipts."""
+    __tablename__ = "receipt_audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    receipt_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("receipts.id", ondelete="SET NULL"), nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    # ENUM: 'created' | 'updated' | 'deleted' | 'restored' | 'exported'
+    event_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    actor: Mapped[str] = mapped_column(String(100), nullable=False, default="james")
+    fields_changed: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    snapshot_before: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    snapshot_after: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    edit_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_audit_log_receipt_id", "receipt_id"),
+        Index("idx_audit_log_event_at", "event_at"),
+    )
+
 
 class Attachment(Base):
     __tablename__ = "attachments"

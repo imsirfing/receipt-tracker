@@ -116,6 +116,7 @@ async def convert_to_receipt(
         RecurringType.ONGOING if body.recurring_type == "ongoing" else RecurringType.ONE_OFF
     )
 
+    from datetime import datetime, timezone as _tz
     receipt = Receipt(
         id=uuid.uuid4(),
         payee=body.payee,
@@ -127,6 +128,8 @@ async def convert_to_receipt(
         category_variable=body.category_variable,
         recurring_type=recurring,
         raw_email_id=pending.gmail_message_id,
+        source="gmail_auto",
+        ingested_at=datetime.now(_tz.utc),
     )
     session.add(receipt)
     await session.delete(pending)

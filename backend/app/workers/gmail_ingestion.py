@@ -167,6 +167,7 @@ async def _persist_receipt(
         else RecurringType.ONE_OFF
     )
 
+    from datetime import timezone as _tz
     receipt = Receipt(
         id=uuid.uuid4(),
         payee=extraction.payee,
@@ -178,6 +179,8 @@ async def _persist_receipt(
         category_variable=category,
         recurring_type=recurring,
         raw_email_id=message_id,
+        source="gmail_auto",
+        ingested_at=datetime.now(_tz.utc),
     )
     session.add(receipt)
     await session.flush()

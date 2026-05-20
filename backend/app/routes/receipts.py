@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models.receipt import Attachment, Receipt, RecurringType
+from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
 
@@ -47,7 +47,10 @@ class ReceiptOut(BaseModel):
     is_tax_deductible: bool = False
     reimbursement_owner: Optional[str] = None
     raw_email_id: str
+    source: str = "manual"
+    ingested_at: Optional[datetime] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
     attachments: List[AttachmentOut] = []
 
 
@@ -82,6 +85,10 @@ class ReceiptUpdate(BaseModel):
     notes: Optional[str] = None
     is_tax_deductible: Optional[bool] = None
     reimbursement_owner: Optional[str] = None
+    inferred_purpose: Optional[str] = None
+    payment_category: Optional[str] = None
+    payment_detail: Optional[str] = None
+    recurring_type: Optional[str] = None
 
 
 @router.post("", response_model=ReceiptOut, status_code=201)
@@ -104,8 +111,15 @@ async def create_receipt(
         is_tax_deductible=body.is_tax_deductible,
         reimbursement_owner=body.reimbursement_owner,
         raw_email_id=f"manual-{uuid.uuid4()}",
+        source="manual",
     )
     session.add(receipt)
+    await session.flush()
+    session.add(ReceiptAuditLog(
+        receipt_id=receipt.id,
+        event_type="created",
+        snapshot_after=receipt.to_audit_dict(),
+    ))
     await session.commit()
     await session.refresh(receipt)
     return receipt
@@ -120,7 +134,7 @@ async def list_receipts(
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> ReceiptListOut:
-    stmt = select(Receipt)
+    stmt = select(Receipt).where(Receipt.deleted_at.is_(None))
     if category is not None:
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
@@ -186,7 +200,9 @@ async def get_receipt(
     receipt_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
 ) -> ReceiptOut:
-    result = await session.execute(select(Receipt).where(Receipt.id == receipt_id))
+    result = await session.execute(
+        select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
+    )
     receipt = result.scalar_one_or_none()
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
@@ -197,15 +213,34 @@ async def get_receipt(
 async def update_receipt(
     receipt_id: uuid.UUID,
     patch: ReceiptUpdate,
+    edit_reason: Optional[str] = Query(None, description="Reason for this edit (logged in audit trail)"),
     session: AsyncSession = Depends(get_session),
 ) -> ReceiptOut:
-    result = await session.execute(select(Receipt).where(Receipt.id == receipt_id))
+    result = await session.execute(
+        select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
+    )
     receipt = result.scalar_one_or_none()
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
 
-    for field, value in patch.model_dump(exclude_unset=True).items():
+    snapshot_before = receipt.to_audit_dict()
+    changes = patch.model_dump(exclude_unset=True)
+    changed_fields = []
+    for field, value in changes.items():
+        if getattr(receipt, field, None) != value:
+            changed_fields.append(field)
         setattr(receipt, field, value)
+    receipt.updated_at = datetime.now(timezone.utc)
+
+    if changed_fields:
+        session.add(ReceiptAuditLog(
+            receipt_id=receipt.id,
+            event_type="updated",
+            fields_changed=changed_fields,
+            snapshot_before=snapshot_before,
+            snapshot_after=receipt.to_audit_dict(),
+            edit_reason=edit_reason,
+        ))
 
     await session.commit()
     await session.refresh(receipt)
@@ -232,16 +267,62 @@ async def reimburse_receipt(
 @router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_receipt(
     receipt_id: uuid.UUID,
+    reason: Optional[str] = Query(None, description="Reason for deletion (logged in audit trail)"),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
-    result = await session.execute(select(Receipt).where(Receipt.id == receipt_id))
+    result = await session.execute(
+        select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
+    )
     receipt = result.scalar_one_or_none()
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
-    await session.delete(receipt)
+    snapshot = receipt.to_audit_dict()
+    receipt.deleted_at = datetime.now(timezone.utc)
+    receipt.deleted_reason = reason
+    receipt.updated_at = datetime.now(timezone.utc)
+    session.add(ReceiptAuditLog(
+        receipt_id=receipt.id,
+        event_type="deleted",
+        snapshot_before=snapshot,
+        edit_reason=reason,
+    ))
     await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
+# ---------------------------------------------------------------------------
+# Audit trail endpoint
+# ---------------------------------------------------------------------------
+
+class AuditLogOut(BaseModel):
+    id: int
+    receipt_id: Optional[uuid.UUID]
+    event_type: str
+    event_at: datetime
+    actor: str
+    fields_changed: Optional[List[str]] = None
+    snapshot_before: Optional[dict] = None
+    snapshot_after: Optional[dict] = None
+    edit_reason: Optional[str] = None
+    notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/{receipt_id}/audit", response_model=List[AuditLogOut])
+async def get_receipt_audit(
+    receipt_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> List[AuditLogOut]:
+    result = await session.execute(
+        select(ReceiptAuditLog)
+        .where(ReceiptAuditLog.receipt_id == receipt_id)
+        .order_by(ReceiptAuditLog.event_at.asc())
+    )
+    return [AuditLogOut.model_validate(row) for row in result.scalars().all()]
+
+
+# ---------------------------------------------------------------------------
 
 from google.cloud import storage as gcs_storage
 
