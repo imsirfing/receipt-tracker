@@ -4,16 +4,53 @@ import { toast } from "sonner";
 import { AccessGrant, grantAccess, listAccess, revokeAccess } from "../api";
 import { useUser } from "../user-context";
 
-const KNOWN_CATEGORIES = [
-  "all",
-  "personal",
-  "realestate",
-  "traverse",
-  "edgehill",
-  "trust",
-  "nopa",
-  "uncategorized",
-];
+const CATEGORIES = ["all", "personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
+const ROLES = ["read", "write"] as const;
+
+function PillPicker<T extends string>({
+  options,
+  value,
+  onChange,
+  colorFn,
+}: {
+  options: readonly T[];
+  value: T;
+  onChange: (v: T) => void;
+  colorFn?: (v: T, selected: boolean) => string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const selected = opt === value;
+        const cls = colorFn
+          ? colorFn(opt, selected)
+          : selected
+          ? "bg-indigo-600 text-white border-indigo-600"
+          : "bg-white text-slate-600 border-slate-300 hover:border-indigo-400";
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${cls}`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function roleColor(v: string, selected: boolean) {
+  if (v === "write")
+    return selected
+      ? "bg-amber-500 text-white border-amber-500"
+      : "bg-white text-slate-600 border-slate-300 hover:border-amber-400";
+  return selected
+    ? "bg-indigo-600 text-white border-indigo-600"
+    : "bg-white text-slate-600 border-slate-300 hover:border-indigo-400";
+}
 
 export default function AccessManager() {
   const navigate = useNavigate();
@@ -22,19 +59,20 @@ export default function AccessManager() {
   const [grants, setGrants] = useState<AccessGrant[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // New grant form
   const [email, setEmail] = useState("");
-  const [category, setCategory] = useState("edgehill");
-  const [role, setRole] = useState("read");
+  const [category, setCategory] = useState<string>("edgehill");
+  const [role, setRole] = useState<string>("read");
   const [saving, setSaving] = useState(false);
 
-  // Redirect non-owners
+  // Inline edit state: maps grant id → { category, role }
+  const [editing, setEditing] = useState<Record<string, { category: string; role: string }>>({});
+  const [editSaving, setEditSaving] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!userLoading && !isOwner) {
-      navigate("/");
-    }
+    if (!userLoading && !isOwner) navigate("/");
   }, [isOwner, userLoading, navigate]);
 
-  // Load grants
   useEffect(() => {
     if (!isOwner) return;
     listAccess()
@@ -43,6 +81,34 @@ export default function AccessManager() {
       .finally(() => setLoading(false));
   }, [isOwner]);
 
+  function startEdit(g: AccessGrant) {
+    setEditing((prev) => ({ ...prev, [g.id]: { category: g.category, role: g.role } }));
+  }
+
+  function cancelEdit(id: string) {
+    setEditing((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function saveEdit(g: AccessGrant) {
+    const patch = editing[g.id];
+    if (!patch) return;
+    setEditSaving(g.id);
+    try {
+      const updated = await grantAccess(g.email, patch.category, patch.role);
+      setGrants((prev) => prev.map((x) => (x.id === g.id ? updated : x)));
+      cancelEdit(g.id);
+      toast.success(`Updated access for ${g.email}`);
+    } catch {
+      toast.error("Failed to update access");
+    } finally {
+      setEditSaving(null);
+    }
+  }
+
   async function handleGrant(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
@@ -50,11 +116,11 @@ export default function AccessManager() {
     try {
       const grant = await grantAccess(email.trim(), category, role);
       setGrants((prev) => {
-        const existing = prev.findIndex((g) => g.email === grant.email);
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = grant;
-          return updated;
+        const idx = prev.findIndex((g) => g.email === grant.email);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = grant;
+          return next;
         }
         return [...prev, grant];
       });
@@ -72,6 +138,7 @@ export default function AccessManager() {
     try {
       await revokeAccess(id);
       setGrants((prev) => prev.filter((g) => g.id !== id));
+      cancelEdit(id);
       toast.success(`Access revoked for ${email}`);
     } catch {
       toast.error("Failed to revoke access");
@@ -79,111 +146,112 @@ export default function AccessManager() {
   }
 
   if (userLoading || loading) {
-    return (
-      <div className="flex items-center justify-center h-64 text-slate-400 text-sm">
-        Loading…
-      </div>
-    );
+    return <div className="flex items-center justify-center h-64 text-slate-400 text-sm">Loading…</div>;
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-8">
-      <h1 className="text-2xl font-bold text-slate-100">Access Management</h1>
+    <div className="max-w-2xl mx-auto space-y-8">
+      <h1 className="text-2xl font-bold text-slate-800">Access Management</h1>
 
-      {/* Current grants table */}
+      {/* Current grants */}
       <section>
-        <h2 className="text-lg font-semibold text-slate-300 mb-3">Current Grants</h2>
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Current grants</h2>
         {grants.length === 0 ? (
-          <p className="text-slate-500 text-sm">No access grants yet.</p>
+          <p className="text-slate-400 text-sm">No access grants yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-700">
-            <table className="w-full text-sm text-slate-300">
-              <thead className="bg-slate-800 text-slate-400 text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-2 text-left">Email</th>
-                  <th className="px-4 py-2 text-left">Category</th>
-                  <th className="px-4 py-2 text-left">Role</th>
-                  <th className="px-4 py-2 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grants.map((g) => (
-                  <tr key={g.id} className="border-t border-slate-700 hover:bg-slate-800/50">
-                    <td className="px-4 py-2">{g.email}</td>
-                    <td className="px-4 py-2">{g.category}</td>
-                    <td className="px-4 py-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          g.role === "write"
-                            ? "bg-amber-900/40 text-amber-300"
-                            : "bg-slate-700 text-slate-300"
-                        }`}
-                      >
-                        {g.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
+          <div className="space-y-2">
+            {grants.map((g) => {
+              const isEditing = !!editing[g.id];
+              const patch = editing[g.id] ?? { category: g.category, role: g.role };
+              return (
+                <div
+                  key={g.id}
+                  className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-slate-800 text-sm truncate">{g.email}</div>
+                      {!isEditing && (
+                        <div className="flex gap-2 mt-1.5">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">{g.category}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${g.role === "write" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{g.role}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      {!isEditing ? (
+                        <button onClick={() => startEdit(g)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</button>
+                      ) : (
+                        <button onClick={() => cancelEdit(g.id)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                      )}
+                      <button onClick={() => handleRevoke(g.id, g.email)} className="text-xs text-red-500 hover:text-red-700 font-medium">Revoke</button>
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
+                      <div>
+                        <div className="text-xs text-slate-400 mb-1.5">Category</div>
+                        <PillPicker
+                          options={CATEGORIES}
+                          value={patch.category}
+                          onChange={(v) => setEditing((prev) => ({ ...prev, [g.id]: { ...prev[g.id], category: v } }))}
+                        />
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-400 mb-1.5">Role</div>
+                        <PillPicker
+                          options={ROLES}
+                          value={patch.role}
+                          onChange={(v) => setEditing((prev) => ({ ...prev, [g.id]: { ...prev[g.id], role: v } }))}
+                          colorFn={roleColor}
+                        />
+                      </div>
                       <button
-                        onClick={() => handleRevoke(g.id, g.email)}
-                        className="text-red-400 hover:text-red-300 text-xs font-medium"
+                        onClick={() => saveEdit(g)}
+                        disabled={editSaving === g.id}
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
                       >
-                        Revoke
+                        {editSaving === g.id ? "Saving…" : "Save changes"}
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
 
-      {/* Grant form */}
+      {/* Add new grant */}
       <section>
-        <h2 className="text-lg font-semibold text-slate-300 mb-3">Grant Access</h2>
-        <form onSubmit={handleGrant} className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Email</label>
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Grant access</h2>
+        <form onSubmit={handleGrant} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+          <div>
+            <label className="text-xs text-slate-500 font-medium mb-1 block">Email</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="user@example.com"
-              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 w-64 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              {KNOWN_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+          <div>
+            <label className="text-xs text-slate-500 font-medium mb-1.5 block">Category</label>
+            <PillPicker options={CATEGORIES} value={category} onChange={setCategory} />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-slate-400">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="read">read</option>
-              <option value="write">write</option>
-            </select>
+          <div>
+            <label className="text-xs text-slate-500 font-medium mb-1.5 block">Role</label>
+            <PillPicker options={ROLES} value={role} onChange={setRole} colorFn={roleColor} />
           </div>
           <button
             type="submit"
             disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-1.5 rounded"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
           >
-            {saving ? "Saving…" : "Add"}
+            {saving ? "Saving…" : "Add access"}
           </button>
         </form>
       </section>

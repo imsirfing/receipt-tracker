@@ -12,6 +12,7 @@ interface UserState {
   loading: boolean;
   canWrite: boolean;
   isOwner: boolean;
+  accessDenied: boolean;
 }
 
 const UserContext = createContext<UserState>({
@@ -19,24 +20,31 @@ const UserContext = createContext<UserState>({
   loading: true,
   canWrite: false,
   isOwner: false,
+  accessDenied: false,
 });
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const { user, loading: authLoading } = useAuth();
   const [me, setMe] = useState<MeInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
       setMe(null);
+      setAccessDenied(false);
       setLoading(false);
       return;
     }
     setLoading(true);
+    setAccessDenied(false);
     getMe()
       .then(setMe)
-      .catch(() => setMe(null))
+      .catch((err) => {
+        if (err?.response?.status === 403) setAccessDenied(true);
+        setMe(null);
+      })
       .finally(() => setLoading(false));
   }, [user, authLoading]);
 
@@ -44,7 +52,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const isOwner = me?.is_owner ?? false;
 
   return (
-    <UserContext.Provider value={{ me, loading, canWrite, isOwner }}>
+    <UserContext.Provider value={{ me, loading, canWrite, isOwner, accessDenied }}>
       {children}
     </UserContext.Provider>
   );
