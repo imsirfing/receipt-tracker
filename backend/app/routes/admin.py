@@ -120,12 +120,12 @@ async def grant_access(
     )
 
 
-@router.delete("/access/{access_id}", status_code=204)
+@router.delete("/access/{access_id}")
 async def revoke_access(
     access_id: str,
     session: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_owner),
-) -> None:
+) -> dict:
     result = await session.execute(
         select(UserAccess).where(UserAccess.id == uuid.UUID(access_id))
     )
@@ -134,3 +134,4 @@ async def revoke_access(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     await session.delete(row)
     await session.commit()
+    return {"ok": True}
