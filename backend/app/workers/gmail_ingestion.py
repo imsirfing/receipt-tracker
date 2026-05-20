@@ -131,6 +131,80 @@ def _extract_body_text(payload: dict) -> str:
     return plain or html or "(no body text)"
 
 
+def _extract_html_body(payload: dict) -> str | None:
+    """Recursively extract the HTML body from a Gmail message payload."""
+    mime = (payload.get("mimeType") or "").lower()
+    body = payload.get("body") or {}
+    data = body.get("data", "")
+
+    if mime == "text/html" and data:
+        return base64.urlsafe_b64decode(data.encode("utf-8")).decode("utf-8", errors="replace")
+
+    parts = payload.get("parts") or []
+    # Walk multipart, prefer text/html
+    for part in parts:
+        part_mime = (part.get("mimeType") or "").lower()
+        part_data = (part.get("body") or {}).get("data", "")
+        if part_mime == "text/html" and part_data:
+            return base64.urlsafe_b64decode(part_data.encode("utf-8")).decode("utf-8", errors="replace")
+        # Recurse into nested multipart
+        result = _extract_html_body(part)
+        if result:
+            return result
+    return None
+
+
+async def screenshot_gmail_message(message_id: str) -> bytes | None:
+    """
+    Fetch a Gmail message's HTML body and return a PNG screenshot of it.
+    Returns None if the message cannot be fetched or rendered.
+    """
+    import tempfile
+    import asyncio
+    try:
+        service = _build_gmail_service()
+        msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        payload = msg.get("payload", {})
+        html_body = _extract_html_body(payload)
+
+        if not html_body:
+            # Fallback: render plain text as simple HTML
+            plain = _extract_body_text(payload)
+            if not plain:
+                return None
+            html_body = f"<html><body><pre style='font-family:sans-serif;white-space:pre-wrap;padding:24px'>{plain}</pre></body></html>"
+
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            )
+            page = await browser.new_page(viewport={"width": 900, "height": 1200})
+
+            # Write HTML to temp file and load it
+            with tempfile.NamedTemporaryFile(suffix=".html", mode="w", encoding="utf-8", delete=False) as f:
+                f.write(html_body)
+                tmp_path = f.name
+
+            await page.goto(f"file://{tmp_path}")
+            await page.wait_for_timeout(500)  # let images/fonts settle
+
+            # Full-page screenshot, cap at ~8000px to avoid huge files
+            screenshot_bytes = await page.screenshot(full_page=True, type="png")
+            await browser.close()
+
+            import os
+            os.unlink(tmp_path)
+
+            return screenshot_bytes
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Email screenshot failed for %s: %s", message_id, exc)
+        return None
+
+
 def _upload_to_gcs(
     bucket: storage.Bucket, category: str, message_id: str, blob: AttachmentBlob
 ) -> str:

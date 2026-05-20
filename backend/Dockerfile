@@ -13,6 +13,9 @@ RUN apt-get update \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright Chromium for email screenshot feature
+RUN playwright install --with-deps chromium
+
 COPY . .
 
 EXPOSE 8080

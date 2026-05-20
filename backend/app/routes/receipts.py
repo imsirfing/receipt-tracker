@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
+from app.workers.gmail_ingestion import screenshot_gmail_message
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
 
@@ -398,6 +399,11 @@ async def get_evidence_package(
         )
         email_provenance = prov_result.scalar_one_or_none()
 
+    # Fetch email screenshot if gmail-sourced
+    email_screenshot_bytes: bytes | None = None
+    if receipt.raw_email_id and email_provenance:
+        email_screenshot_bytes = await screenshot_gmail_message(receipt.raw_email_id)
+
     # 4. Generate signed URLs for attachments
     signed_attachments = []
     try:
@@ -518,6 +524,19 @@ async def get_evidence_package(
                 story.append(Paragraph("Body Preview", styles["Heading3"]))
                 preview = (email_provenance.body_preview or "")[:2000]
                 story.append(Paragraph(preview.replace("\n", "<br/>"), styles["Normal"]))
+
+        # ── Email Screenshot page ──
+        if email_screenshot_bytes:
+            from reportlab.platypus import Image as RLImage
+            import io as _io
+            story.append(PageBreak())
+            story.append(Paragraph("Email Screenshot", styles["Title"]))
+            story.append(Spacer(1, 0.15 * inch))
+            story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
+            story.append(Spacer(1, 0.2 * inch))
+            img_buf = _io.BytesIO(email_screenshot_bytes)
+            img = RLImage(img_buf, width=6.5 * inch, kind="proportional")
+            story.append(img)
 
         # ── Page 4+: Attachment Links ──
         if signed_attachments:
