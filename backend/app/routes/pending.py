@@ -7,6 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -98,7 +99,26 @@ async def convert_to_receipt(
     )
     session.add(receipt)
     await session.delete(pending)
-    await session.commit()
-    await session.refresh(receipt)
-
-    return receipt
+    try:
+        await session.commit()
+        await session.refresh(receipt)
+        return receipt
+    except IntegrityError:
+        # A receipt with this gmail_message_id already exists — clean up the
+        # pending entry and return the existing receipt.
+        await session.rollback()
+        existing = await session.execute(
+            select(Receipt).where(Receipt.raw_email_id == pending.gmail_message_id)
+        )
+        existing_receipt = existing.scalar_one_or_none()
+        if existing_receipt is None:
+            raise HTTPException(status_code=409, detail="Receipt already exists but could not be located.")
+        # Delete the stale pending row
+        stale = await session.execute(
+            select(PendingEmail).where(PendingEmail.id == pending_id)
+        )
+        stale_row = stale.scalar_one_or_none()
+        if stale_row:
+            await session.delete(stale_row)
+            await session.commit()
+        return existing_receipt
