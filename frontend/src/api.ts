@@ -209,3 +209,17 @@ export const convertPending = async (id: string, body: ConvertRequest): Promise<
   const res = await api.post<Receipt>(`/api/pending/${id}/convert`, body);
   return res.data;
 };
+
+export async function downloadEvidencePackage(receiptId: string): Promise<void> {
+  const response = await api.get(`/api/receipts/${receiptId}/evidence-package`, {
+    responseType: 'blob',
+  });
+  const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `evidence-${receiptId}.pdf`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}

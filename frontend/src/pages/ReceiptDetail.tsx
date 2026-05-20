@@ -15,6 +15,7 @@ export default function ReceiptDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [auditLog, setAuditLog] = useState<AuditEntry[] | null>(null);
@@ -126,6 +127,23 @@ export default function ReceiptDetailPage() {
           >
             ${Number(receipt.amount).toFixed(2)}
           </div>
+          <button
+            onClick={async () => {
+              if (!id) return;
+              setEvidenceLoading(true);
+              try {
+                await downloadEvidencePackage(id);
+              } catch (e) {
+                alert("Failed to generate evidence package: " + String(e));
+              } finally {
+                setEvidenceLoading(false);
+              }
+            }}
+            disabled={evidenceLoading}
+            className="inline-flex items-center gap-1 text-xs bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 px-2 py-1 rounded"
+          >
+            {evidenceLoading ? "Generating…" : "📦 Evidence Package"}
+          </button>
           <button
             onClick={() => setEditing(true)}
             className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"

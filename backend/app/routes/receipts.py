@@ -10,10 +10,15 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
+from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
@@ -358,3 +363,199 @@ async def get_attachment_url(
     )
     filename = blob_path.split("/")[-1]
     return {"url": url, "file_type": attachment.file_type, "filename": filename}
+
+
+# ---------------------------------------------------------------------------
+# Evidence Package endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/{receipt_id}/evidence-package")
+async def get_evidence_package(
+    receipt_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> StreamingResponse:
+    # 1. Fetch receipt
+    result = await session.execute(
+        select(Receipt).where(Receipt.id == receipt_id)
+    )
+    receipt = result.scalar_one_or_none()
+    if receipt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
+
+    # 2. Fetch audit log
+    audit_result = await session.execute(
+        select(ReceiptAuditLog)
+        .where(ReceiptAuditLog.receipt_id == receipt_id)
+        .order_by(ReceiptAuditLog.event_at.asc())
+    )
+    audit_entries = audit_result.scalars().all()
+
+    # 3. Try to fetch email provenance
+    email_provenance = None
+    if receipt.raw_email_id and not receipt.raw_email_id.startswith("manual-"):
+        prov_result = await session.execute(
+            select(PendingEmail).where(PendingEmail.gmail_message_id == receipt.raw_email_id)
+        )
+        email_provenance = prov_result.scalar_one_or_none()
+
+    # 4. Generate signed URLs for attachments
+    signed_attachments = []
+    try:
+        from google.cloud import storage as gcs_storage
+        gcs_client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
+        for att in receipt.attachments:
+            gcs_uri = att.gcs_uri
+            _, _, rest = gcs_uri.partition("gs://")
+            bucket_name, _, blob_path = rest.partition("/")
+            blob = gcs_client.bucket(bucket_name).blob(blob_path)
+            signed_url = blob.generate_signed_url(
+                expiration=timedelta(hours=1),
+                method="GET",
+                version="v4",
+            )
+            filename = blob_path.split("/")[-1]
+            signed_attachments.append({
+                "id": att.id,
+                "filename": att.filename or filename,
+                "file_type": att.file_type,
+                "signed_url": signed_url,
+            })
+    except Exception:
+        # If GCS is unavailable, attach without signed URLs
+        for att in receipt.attachments:
+            filename = att.gcs_uri.split("/")[-1]
+            signed_attachments.append({
+                "id": att.id,
+                "filename": att.filename or filename,
+                "file_type": att.file_type,
+                "signed_url": None,
+            })
+
+    # 5. Build PDF
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, leftMargin=inch, rightMargin=inch, topMargin=inch, bottomMargin=inch)
+        styles = getSampleStyleSheet()
+        story = []
+
+        now_utc = datetime.now(timezone.utc)
+        source_label = "Gmail auto-parse" if (receipt.source == "gmail_auto" and not (receipt.raw_email_id or "").startswith("manual-")) else "Manual"
+
+        # ── Page 1: Cover Sheet ──
+        story.append(Paragraph("Evidence Package", styles["Title"]))
+        story.append(Spacer(1, 0.15 * inch))
+        story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
+        story.append(Spacer(1, 0.2 * inch))
+
+        story.append(Paragraph("Receipt Summary", styles["Heading2"]))
+        fields = [
+            ("Payee", receipt.payee),
+            ("Amount", f"${receipt.amount:.2f}"),
+            ("Date", str(receipt.date)),
+            ("Category", receipt.category_variable or "—"),
+            ("Purpose", receipt.inferred_purpose or "—"),
+            ("Source", source_label),
+            ("Ingested at", str(receipt.ingested_at) if receipt.ingested_at else "—"),
+            ("Created at", str(receipt.created_at)),
+            ("Number of attachments", str(len(receipt.attachments))),
+            ("Number of audit events", str(len(audit_entries))),
+            ("Export generated at", now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")),
+        ]
+        for label, value in fields:
+            story.append(Paragraph(f"<b>{label}:</b> {value}", styles["Normal"]))
+            story.append(Spacer(1, 0.05 * inch))
+
+        story.append(Spacer(1, 0.3 * inch))
+        story.append(Paragraph("Generated by Sparticus Receipt Tracker", styles["Italic"]))
+
+        # ── Page 2: Audit Trail ──
+        from reportlab.platypus import PageBreak
+        story.append(PageBreak())
+        story.append(Paragraph("Audit Trail", styles["Title"]))
+        story.append(Spacer(1, 0.15 * inch))
+        story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
+        story.append(Spacer(1, 0.2 * inch))
+
+        if not audit_entries:
+            story.append(Paragraph("No audit events recorded.", styles["Normal"]))
+        else:
+            for entry in audit_entries:
+                event_at_str = entry.event_at.strftime("%Y-%m-%d %H:%M:%S UTC") if entry.event_at else "—"
+                story.append(Paragraph(f"<b>{entry.event_type.upper()}</b> — {event_at_str} — Actor: {entry.actor or '—'}", styles["Heading3"]))
+                if entry.edit_reason:
+                    story.append(Paragraph(f"Reason: {entry.edit_reason}", styles["Italic"]))
+                if entry.event_type == "updated" and entry.fields_changed:
+                    for field in entry.fields_changed:
+                        before = (entry.snapshot_before or {}).get(field)
+                        after = (entry.snapshot_after or {}).get(field)
+                        story.append(Paragraph(
+                            f"&nbsp;&nbsp;<b>{field}:</b> {before} → {after}",
+                            styles["Normal"]
+                        ))
+                story.append(Spacer(1, 0.1 * inch))
+
+        # ── Page 3: Email Provenance (if gmail-sourced) ──
+        if email_provenance:
+            story.append(PageBreak())
+            story.append(Paragraph("Email Provenance", styles["Title"]))
+            story.append(Spacer(1, 0.15 * inch))
+            story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
+            story.append(Spacer(1, 0.2 * inch))
+
+            gmail_link = f"https://mail.google.com/mail/u/0/#inbox/{receipt.raw_email_id}"
+            prov_fields = [
+                ("From", email_provenance.from_address or "—"),
+                ("Subject", email_provenance.subject or "—"),
+                ("Gmail Message ID", receipt.raw_email_id),
+                ("Gmail link", f'<a href="{gmail_link}">{gmail_link}</a>'),
+            ]
+            for label, value in prov_fields:
+                story.append(Paragraph(f"<b>{label}:</b> {value}", styles["Normal"]))
+                story.append(Spacer(1, 0.05 * inch))
+
+            if email_provenance.body_preview:
+                story.append(Spacer(1, 0.15 * inch))
+                story.append(Paragraph("Body Preview", styles["Heading3"]))
+                preview = (email_provenance.body_preview or "")[:2000]
+                story.append(Paragraph(preview.replace("\n", "<br/>"), styles["Normal"]))
+
+        # ── Page 4+: Attachment Links ──
+        if signed_attachments:
+            story.append(PageBreak())
+            story.append(Paragraph("Attachments", styles["Title"]))
+            story.append(Spacer(1, 0.15 * inch))
+            story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
+            story.append(Spacer(1, 0.2 * inch))
+            story.append(Paragraph("Original files preserved in Google Cloud Storage.", styles["Italic"]))
+            story.append(Spacer(1, 0.15 * inch))
+
+            for att in signed_attachments:
+                story.append(Paragraph(f"<b>Filename:</b> {att['filename']}", styles["Normal"]))
+                story.append(Paragraph(f"<b>Type:</b> {att['file_type']}", styles["Normal"]))
+                if att["signed_url"]:
+                    url = att["signed_url"]
+                    story.append(Paragraph(f'<b>URL (1 hour):</b> <a href="{url}">{url[:80]}...</a>', styles["Normal"]))
+                else:
+                    story.append(Paragraph("<b>URL:</b> unavailable", styles["Normal"]))
+                story.append(Spacer(1, 0.15 * inch))
+
+        doc.build(story)
+        buffer.seek(0)
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}") from exc
+
+    # 7. Log exported event
+    session.add(ReceiptAuditLog(
+        receipt_id=receipt_id,
+        event_type="exported",
+        actor="james",
+        notes="Evidence package exported as PDF",
+    ))
+    await session.commit()
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="evidence-{receipt_id}.pdf"'},
+    )
