@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
+import { BarChart3, ClipboardList, LogOut, MessageSquare, Receipt, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
-import { triggerIngest, getIngestStatus, listPending } from "../api";
+import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
 
-const nav = [
+const baseNav = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
   { to: "/review", label: "Review", icon: ClipboardList },
   { to: "/receipts", label: "Receipts", icon: Receipt },
@@ -18,10 +18,17 @@ export default function Layout() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     listPending().then(data => setPendingCount(data.total)).catch(() => {});
+    getMe().then(me => setIsOwner(me.is_owner)).catch(() => {});
   }, []);
+
+  const nav = [
+    ...baseNav,
+    ...(isOwner ? [{ to: "/admin/access", label: "Access", icon: ShieldCheck }] : []),
+  ];
 
   const handleSync = async () => {
     if (syncing) return;
