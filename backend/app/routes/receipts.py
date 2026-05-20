@@ -145,6 +145,8 @@ async def list_receipts(
             or_(
                 Receipt.payee.ilike(term),
                 Receipt.inferred_purpose.ilike(term),
+                Receipt.notes.ilike(term),
+                Receipt.category_variable.ilike(term),
                 Receipt.payment_detail.ilike(term),
                 Receipt.payment_category.ilike(term),
             )
