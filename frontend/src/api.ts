@@ -50,11 +50,27 @@ export interface Receipt {
   is_reimbursed: boolean;
   reimbursed_at: string | null;
   raw_email_id: string;
+  source: string;
+  ingested_at: string | null;
   created_at: string;
+  updated_at: string | null;
   attachments: Array<{ id: string; gcs_uri: string; file_type: string }>;
   notes?: string | null;
   is_tax_deductible?: boolean;
   reimbursement_owner?: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  receipt_id: string | null;
+  event_type: string;
+  event_at: string;
+  actor: string;
+  fields_changed: string[] | null;
+  snapshot_before: Record<string, unknown> | null;
+  snapshot_after: Record<string, unknown> | null;
+  edit_reason: string | null;
+  notes: string | null;
 }
 
 export interface ReceiptListResponse {
@@ -96,6 +112,11 @@ export const markReimbursed = async (id: string) => {
 
 export const getReceipt = async (id: string): Promise<Receipt> => {
   const res = await api.get<Receipt>(`/api/receipts/${id}`);
+  return res.data;
+};
+
+export const getReceiptAudit = async (id: string): Promise<AuditEntry[]> => {
+  const res = await api.get<AuditEntry[]>(`/api/receipts/${id}/audit`);
   return res.data;
 };
 
