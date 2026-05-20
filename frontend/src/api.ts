@@ -210,6 +210,37 @@ export const convertPending = async (id: string, body: ConvertRequest): Promise<
   return res.data;
 };
 
+export interface ParseImageResult {
+  payee: string;
+  amount: number;
+  date: string;
+  inferred_purpose: string;
+  recurring_type: string;
+  payment_category: string;
+  payment_detail: string;
+  attachment_gcs_uri: string;
+  attachment_file_type: string;
+  attachment_filename: string | null;
+}
+
+export const parseReceiptImage = async (file: File): Promise<ParseImageResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post<ParseImageResult>("/api/receipts/parse-image", formData);
+  return res.data;
+};
+
+export interface AttachImageRequest {
+  gcs_uri: string;
+  file_type: string;
+  filename?: string;
+}
+
+export const attachImage = async (receiptId: string, body: AttachImageRequest): Promise<Receipt> => {
+  const res = await api.post<Receipt>(`/api/receipts/${receiptId}/attach-image`, body);
+  return res.data;
+};
+
 export async function downloadEvidencePackage(receiptId: string): Promise<void> {
   const response = await api.get(`/api/receipts/${receiptId}/evidence-package`, {
     responseType: 'blob',

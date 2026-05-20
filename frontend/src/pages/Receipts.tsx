@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Pencil, X } from "lucide-react";
+import { Camera, Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
-import { createReceipt, deleteReceipt, listReceipts, markReimbursed, Receipt, ReceiptCreateRequest, updateReceipt } from "../api";
+import {
+  attachImage,
+  createReceipt,
+  deleteReceipt,
+  listReceipts,
+  markReimbursed,
+  parseReceiptImage,
+  ParseImageResult,
+  Receipt,
+  ReceiptCreateRequest,
+  updateReceipt,
+} from "../api";
 
 const PAGE_SIZE = 50;
 
@@ -20,6 +31,11 @@ export default function ReceiptsPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+
+  // Upload receipt photo state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadParsing, setUploadParsing] = useState(false);
+  const [uploadResult, setUploadResult] = useState<ParseImageResult | null>(null);
 
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterReimbursed, setFilterReimbursed] = useState<string>("");
@@ -101,16 +117,61 @@ export default function ReceiptsPage() {
     await refresh();
   };
 
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!fileInputRef.current) return;
+    fileInputRef.current.value = "";
+    if (!file) return;
+    setUploadParsing(true);
+    try {
+      const result = await parseReceiptImage(file);
+      setUploadResult(result);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Could not parse receipt: ${msg}`);
+    } finally {
+      setUploadParsing(false);
+    }
+  };
+
   return (
     <div>
+      {/* Hidden file input for camera/photo upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoSelect}
+      />
+
+      {/* Parsing overlay */}
+      {uploadParsing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <div className="text-slate-700 font-medium">Parsing receipt…</div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Receipts</h1>
-        <button
-          onClick={() => { setCreateForm({ recurring_type: "one_off", category_variable: "personal" }); setShowCreate(true); }}
-          className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-        >
-          + Create Receipt
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <Camera size={15} /> Add Receipt
+          </button>
+          <button
+            onClick={() => { setCreateForm({ recurring_type: "one_off", category_variable: "personal" }); setShowCreate(true); }}
+            className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            + Create Receipt
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4 items-center">
@@ -252,6 +313,18 @@ export default function ReceiptsPage() {
 
       {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} onDelete={handleDelete} />}
 
+      {uploadResult && (
+        <UploadReceiptModal
+          parsed={uploadResult}
+          onClose={() => setUploadResult(null)}
+          onSaved={async () => {
+            setUploadResult(null);
+            setPage(0);
+            await refresh();
+          }}
+        />
+      )}
+
       {/* Create Receipt Modal */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -328,6 +401,126 @@ export default function ReceiptsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function UploadReceiptModal({
+  parsed,
+  onClose,
+  onSaved,
+}: {
+  parsed: ParseImageResult;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState<Partial<ReceiptCreateRequest>>({
+    payee: parsed.payee,
+    amount: parsed.amount,
+    date: parsed.date,
+    inferred_purpose: parsed.inferred_purpose,
+    payment_category: parsed.payment_category,
+    payment_detail: parsed.payment_detail,
+    recurring_type: parsed.recurring_type ?? "one_off",
+    category_variable: "personal",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!form.payee || !form.amount || !form.date) {
+      toast.error("Payee, amount, and date are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const receipt = await createReceipt(form as ReceiptCreateRequest);
+      await attachImage(receipt.id, {
+        gcs_uri: parsed.attachment_gcs_uri,
+        file_type: parsed.attachment_file_type,
+        filename: parsed.attachment_filename ?? undefined,
+      });
+      toast.success("Receipt saved!");
+      await onSaved();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Failed to save receipt: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-semibold text-slate-800">Review Parsed Receipt</h2>
+          <button onClick={onClose}><X size={18} /></button>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">AI extracted these fields — review and edit before saving.</p>
+        <div className="space-y-3">
+          {([
+            ["Payee", "payee", "text"],
+            ["Amount", "amount", "number"],
+            ["Date", "date", "date"],
+            ["Purpose", "inferred_purpose", "text"],
+            ["Payment Category", "payment_category", "text"],
+            ["Payment Detail", "payment_detail", "text"],
+          ] as [string, keyof ReceiptCreateRequest, string][]).map(([label, field, type]) => (
+            <div key={field}>
+              <label className="block text-xs font-medium text-slate-500 mb-1">{label}</label>
+              <input
+                type={type}
+                value={(form[field] as string | number) ?? ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    [field]: type === "number" ? parseFloat(e.target.value) : e.target.value,
+                  }))
+                }
+                className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+            </div>
+          ))}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+            <select
+              value={form.category_variable ?? "personal"}
+              onChange={(e) => setForm((f) => ({ ...f, category_variable: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-1.5 text-sm"
+            >
+              {KNOWN_CATEGORIES.filter((c) => c !== "uncategorized").map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Recurring</label>
+            <select
+              value={form.recurring_type ?? "one_off"}
+              onChange={(e) => setForm((f) => ({ ...f, recurring_type: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="one_off">One-off</option>
+              <option value="ongoing">Ongoing</option>
+            </select>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save Receipt"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

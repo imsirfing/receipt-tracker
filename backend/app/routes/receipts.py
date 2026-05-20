@@ -7,7 +7,7 @@ import uuid
 from datetime import date as _Date, datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from reportlab.lib.pagesizes import letter
@@ -16,6 +16,8 @@ from reportlab.lib.units import inch
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from google.cloud import storage as gcs_storage
 
 from app.db import get_session
 from app.models.pending_email import PendingEmail
@@ -203,6 +205,70 @@ async def export_receipts_csv(
     )
 
 
+# ---------------------------------------------------------------------------
+# Image upload + parse endpoint
+# ---------------------------------------------------------------------------
+
+class AttachImageRequest(BaseModel):
+    gcs_uri: str
+    file_type: str
+    filename: Optional[str] = None
+
+
+@router.post("/parse-image")
+async def parse_receipt_image(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Accept an image upload, run AI parsing, return extracted fields + GCS URI."""
+    from app.services.document_parser import DocumentParser, NotAReceiptError
+
+    content_type = file.content_type or ""
+    allowed_types = {"image/jpeg", "image/png", "image/heic", "image/webp"}
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File must be an image (jpeg, png, heic, webp). Got: {content_type}",
+        )
+
+    image_bytes = await file.read()
+
+    ext_map = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/heic": "heic",
+        "image/webp": "webp",
+    }
+    ext = ext_map.get(content_type, "jpg")
+
+    bucket_name = os.getenv("GCS_BUCKET_NAME")
+    blob_path = f"manual-uploads/{uuid.uuid4()}.{ext}"
+    gcs_client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
+    blob = gcs_client.bucket(bucket_name).blob(blob_path)
+    blob.upload_from_string(image_bytes, content_type=content_type)
+    gcs_uri = f"gs://{bucket_name}/{blob_path}"
+
+    try:
+        extraction = DocumentParser().extract(image_bytes, mime_type=content_type)
+    except NotAReceiptError as exc:
+        raise HTTPException(status_code=400, detail=f"Not a receipt: {exc.reason}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Parsing failed: {exc}") from exc
+
+    return {
+        "payee": extraction.payee,
+        "amount": extraction.amount,
+        "date": extraction.date,
+        "inferred_purpose": extraction.inferred_purpose,
+        "recurring_type": extraction.recurring_type,
+        "payment_category": extraction.payment_category,
+        "payment_detail": extraction.payment_detail,
+        "attachment_gcs_uri": gcs_uri,
+        "attachment_file_type": content_type,
+        "attachment_filename": file.filename,
+    }
+
+
 @router.get("/{receipt_id}", response_model=ReceiptOut)
 async def get_receipt(
     receipt_id: uuid.UUID,
@@ -298,6 +364,33 @@ async def delete_receipt(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/{receipt_id}/attach-image", response_model=ReceiptOut)
+async def attach_image_to_receipt(
+    receipt_id: uuid.UUID,
+    body: AttachImageRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ReceiptOut:
+    """Create an Attachment row linking a GCS image to the given receipt."""
+    result = await session.execute(
+        select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
+    )
+    receipt = result.scalar_one_or_none()
+    if receipt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
+
+    attachment = Attachment(
+        id=uuid.uuid4(),
+        gcs_uri=body.gcs_uri,
+        file_type=body.file_type,
+        filename=body.filename,
+        receipt_id=receipt.id,
+    )
+    session.add(attachment)
+    await session.commit()
+    await session.refresh(receipt)
+    return ReceiptOut.model_validate(receipt)
+
+
 # ---------------------------------------------------------------------------
 # Audit trail endpoint
 # ---------------------------------------------------------------------------
@@ -331,8 +424,6 @@ async def get_receipt_audit(
 
 
 # ---------------------------------------------------------------------------
-
-from google.cloud import storage as gcs_storage
 
 
 @router.get("/{receipt_id}/attachments/{attachment_id}/url")
