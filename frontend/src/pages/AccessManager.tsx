@@ -42,6 +42,41 @@ function PillPicker<T extends string>({
   );
 }
 
+function MultiPillPicker({
+  options,
+  values,
+  onChange,
+}: {
+  options: readonly string[];
+  values: string[];
+  onChange: (v: string[]) => void;
+}) {
+  function toggle(opt: string) {
+    onChange(values.includes(opt) ? values.filter((v) => v !== opt) : [...values, opt]);
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const selected = values.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => toggle(opt)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+              selected
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "bg-white text-slate-600 border-slate-300 hover:border-indigo-400"
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function roleColor(v: string, selected: boolean) {
   if (v === "write")
     return selected
@@ -61,7 +96,7 @@ export default function AccessManager() {
 
   // New grant form
   const [email, setEmail] = useState("");
-  const [category, setCategory] = useState<string>("edgehill");
+  const [categories, setCategories] = useState<string[]>([]);
   const [role, setRole] = useState<string>("read");
   const [saving, setSaving] = useState(false);
 
@@ -113,22 +148,24 @@ export default function AccessManager() {
 
   async function handleGrant(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || categories.length === 0) return;
     setSaving(true);
     try {
-      const grant = await grantAccess(email.trim(), category, role);
-      // Insert new grant (or return existing row if email+category already exists)
+      const results = await Promise.all(
+        categories.map((cat) => grantAccess(email.trim(), cat, role))
+      );
       setGrants((prev) => {
-        const idx = prev.findIndex((g) => g.id === grant.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = grant;
-          return next;
+        let next = [...prev];
+        for (const grant of results) {
+          const idx = next.findIndex((g) => g.id === grant.id);
+          if (idx >= 0) next[idx] = grant;
+          else next = [...next, grant];
         }
-        return [...prev, grant];
+        return next;
       });
       setEmail("");
-      toast.success(`Access granted to ${grant.email}`);
+      setCategories([]);
+      toast.success(`Access granted to ${email.trim()} (${results.length} categor${results.length === 1 ? "y" : "ies"})`);
     } catch {
       toast.error("Failed to grant access");
     } finally {
@@ -239,8 +276,10 @@ export default function AccessManager() {
             />
           </div>
           <div>
-            <label className="text-xs text-slate-500 font-medium mb-1.5 block">Category</label>
-            <PillPicker options={CATEGORIES} value={category} onChange={setCategory} />
+            <label className="text-xs text-slate-500 font-medium mb-1.5 block">
+              Categories <span className="text-slate-400 font-normal">(select one or more)</span>
+            </label>
+            <MultiPillPicker options={CATEGORIES} values={categories} onChange={setCategories} />
           </div>
           <div>
             <label className="text-xs text-slate-500 font-medium mb-1.5 block">Role</label>
@@ -248,10 +287,10 @@ export default function AccessManager() {
           </div>
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || categories.length === 0}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg"
           >
-            {saving ? "Saving…" : "Add access"}
+            {saving ? "Saving…" : categories.length > 1 ? `Add ${categories.length} category grants` : "Add access"}
           </button>
         </form>
       </section>
