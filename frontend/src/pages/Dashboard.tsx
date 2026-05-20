@@ -29,19 +29,19 @@ export default function Dashboard() {
   const [monthsBack, setMonthsBack] = useState(12);
   const { me, isOwner } = useUser();
 
-  // For non-owners, restrict to their granted category; owners see all
-  const allowedCategory = (!isOwner && me?.access_category && me.access_category !== "all")
-    ? me.access_category
+  // For non-owners, restrict to their granted categories; owners see all
+  const allowedCategories = (!isOwner && me?.access_categories && !me.access_categories.includes("all"))
+    ? me.access_categories
     : null;
-  const singleCategory = allowedCategory !== null;
+  const singleCategory = allowedCategories?.length === 1;
 
   const [selectedCategory, setSelectedCategory] = useState("all");
   const navigate = useNavigate();
 
-  // Auto-select the only allowed category for restricted users
+  // Auto-select the only allowed category for single-category restricted users
   useEffect(() => {
-    if (allowedCategory) setSelectedCategory(allowedCategory);
-  }, [allowedCategory]);
+    if (singleCategory && allowedCategories) setSelectedCategory(allowedCategories[0]);
+  }, [singleCategory, allowedCategories]);
 
   useEffect(() => {
     listReceipts()
@@ -146,7 +146,7 @@ export default function Dashboard() {
           >
             {!singleCategory && <option value="all">All categories</option>}
             {CATEGORIES
-              .filter(c => singleCategory ? c === allowedCategory : c !== "uncategorized")
+              .filter(c => allowedCategories ? allowedCategories.includes(c) : c !== "uncategorized")
               .map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}

@@ -254,7 +254,7 @@ export interface AccessGrant {
 
 export interface MeInfo {
   is_owner: boolean;
-  access_category: string;
+  access_categories: string[];   // was access_category: string
   role: string;
 }
 

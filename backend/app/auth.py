@@ -29,11 +29,11 @@ async def get_current_user(
     the caller's access level.
 
     Returns a dict with keys:
-        uid              – Firebase UID (or "local-dev" in local mode)
-        email            – caller's email address
-        is_owner         – True for jamestinsley@gmail.com
-        access_category  – "all" for owner; the granted category for guests
-        role             – "write" for owner; "read" or "write" for guests
+        uid               – Firebase UID (or "local-dev" in local mode)
+        email             – caller's email address
+        is_owner          – True for jamestinsley@gmail.com
+        access_categories – ["all"] for owner; list of granted categories for guests
+        role              – "write" for owner; "read" or "write" for guests
     """
     # ── Local dev bypass ────────────────────────────────────────────────────
     if os.getenv("ENVIRONMENT") == "local":
@@ -41,7 +41,7 @@ async def get_current_user(
             "uid": "local-dev",
             "email": OWNER_EMAIL,
             "is_owner": True,
-            "access_category": "all",
+            "access_categories": ["all"],
             "role": "write",
         }
 
@@ -70,7 +70,7 @@ async def get_current_user(
             "uid": uid,
             "email": email,
             "is_owner": True,
-            "access_category": "all",
+            "access_categories": ["all"],
             "role": "write",
         }
 
@@ -78,17 +78,20 @@ async def get_current_user(
     result = await session.execute(
         select(UserAccess).where(UserAccess.email == email)
     )
-    access = result.scalar_one_or_none()
-    if access is None:
+    rows = result.scalars().all()
+    if not rows:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
         )
 
+    access_categories: list[str] = [row.category for row in rows]
+    role = "write" if any(row.role == "write" for row in rows) else "read"
+
     return {
         "uid": uid,
         "email": email,
         "is_owner": False,
-        "access_category": access.category,
-        "role": access.role,
+        "access_categories": access_categories,
+        "role": role,
     }

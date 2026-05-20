@@ -65,8 +65,8 @@ export default function AccessManager() {
   const [role, setRole] = useState<string>("read");
   const [saving, setSaving] = useState(false);
 
-  // Inline edit state: maps grant id → { category, role }
-  const [editing, setEditing] = useState<Record<string, { category: string; role: string }>>({});
+  // Inline edit state: maps grant id → { role }
+  const [editing, setEditing] = useState<Record<string, { role: string }>>({});
   const [editSaving, setEditSaving] = useState<string | null>(null);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function AccessManager() {
   }, [isOwner]);
 
   function startEdit(g: AccessGrant) {
-    setEditing((prev) => ({ ...prev, [g.id]: { category: g.category, role: g.role } }));
+    setEditing((prev) => ({ ...prev, [g.id]: { role: g.role } }));
   }
 
   function cancelEdit(id: string) {
@@ -98,7 +98,9 @@ export default function AccessManager() {
     if (!patch) return;
     setEditSaving(g.id);
     try {
-      const updated = await grantAccess(g.email, patch.category, patch.role);
+      // To change role for a specific grant: revoke + re-add
+      await revokeAccess(g.id);
+      const updated = await grantAccess(g.email, g.category, patch.role);
       setGrants((prev) => prev.map((x) => (x.id === g.id ? updated : x)));
       cancelEdit(g.id);
       toast.success(`Updated access for ${g.email}`);
@@ -115,8 +117,9 @@ export default function AccessManager() {
     setSaving(true);
     try {
       const grant = await grantAccess(email.trim(), category, role);
+      // Insert new grant (or return existing row if email+category already exists)
       setGrants((prev) => {
-        const idx = prev.findIndex((g) => g.email === grant.email);
+        const idx = prev.findIndex((g) => g.id === grant.id);
         if (idx >= 0) {
           const next = [...prev];
           next[idx] = grant;
@@ -159,63 +162,60 @@ export default function AccessManager() {
         {grants.length === 0 ? (
           <p className="text-slate-400 text-sm">No access grants yet.</p>
         ) : (
-          <div className="space-y-2">
-            {grants.map((g) => {
-              const isEditing = !!editing[g.id];
-              const patch = editing[g.id] ?? { category: g.category, role: g.role };
+          <div className="space-y-4">
+            {/* Group grants by email */}
+            {Array.from(new Set(grants.map((g) => g.email))).map((emailAddr) => {
+              const emailGrants = grants.filter((g) => g.email === emailAddr);
               return (
-                <div
-                  key={g.id}
-                  className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-medium text-slate-800 text-sm truncate">{g.email}</div>
-                      {!isEditing && (
-                        <div className="flex gap-2 mt-1.5">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">{g.category}</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${g.role === "write" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{g.role}</span>
+                <div key={emailAddr} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <div className="font-medium text-slate-800 text-sm mb-3">{emailAddr}</div>
+                  <div className="space-y-2">
+                    {emailGrants.map((g) => {
+                      const isEditing = !!editing[g.id];
+                      const patch = editing[g.id] ?? { role: g.role };
+                      return (
+                        <div key={g.id} className="border border-slate-100 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex gap-2 items-center">
+                              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">{g.category}</span>
+                              {!isEditing && (
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${g.role === "write" ? "bg-amber-100 text-amber-700" : "bg-indigo-50 text-indigo-600"}`}>{g.role}</span>
+                              )}
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              {!isEditing ? (
+                                <button onClick={() => startEdit(g)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</button>
+                              ) : (
+                                <button onClick={() => cancelEdit(g.id)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                              )}
+                              <button onClick={() => handleRevoke(g.id, g.email)} className="text-xs text-red-500 hover:text-red-700 font-medium">Revoke</button>
+                            </div>
+                          </div>
+                          {isEditing && (
+                            <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                              <div className="text-xs text-slate-400">To change category, revoke and re-add.</div>
+                              <div>
+                                <div className="text-xs text-slate-400 mb-1.5">Role</div>
+                                <PillPicker
+                                  options={ROLES}
+                                  value={patch.role}
+                                  onChange={(v) => setEditing((prev) => ({ ...prev, [g.id]: { ...prev[g.id], role: v } }))}
+                                  colorFn={roleColor}
+                                />
+                              </div>
+                              <button
+                                onClick={() => saveEdit(g)}
+                                disabled={editSaving === g.id}
+                                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+                              >
+                                {editSaving === g.id ? "Saving…" : "Save changes"}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      {!isEditing ? (
-                        <button onClick={() => startEdit(g)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</button>
-                      ) : (
-                        <button onClick={() => cancelEdit(g.id)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
-                      )}
-                      <button onClick={() => handleRevoke(g.id, g.email)} className="text-xs text-red-500 hover:text-red-700 font-medium">Revoke</button>
-                    </div>
+                      );
+                    })}
                   </div>
-
-                  {isEditing && (
-                    <div className="mt-4 space-y-3 border-t border-slate-100 pt-3">
-                      <div>
-                        <div className="text-xs text-slate-400 mb-1.5">Category</div>
-                        <PillPicker
-                          options={CATEGORIES}
-                          value={patch.category}
-                          onChange={(v) => setEditing((prev) => ({ ...prev, [g.id]: { ...prev[g.id], category: v } }))}
-                        />
-                      </div>
-                      <div>
-                        <div className="text-xs text-slate-400 mb-1.5">Role</div>
-                        <PillPicker
-                          options={ROLES}
-                          value={patch.role}
-                          onChange={(v) => setEditing((prev) => ({ ...prev, [g.id]: { ...prev[g.id], role: v } }))}
-                          colorFn={roleColor}
-                        />
-                      </div>
-                      <button
-                        onClick={() => saveEdit(g)}
-                        disabled={editSaving === g.id}
-                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
-                      >
-                        {editSaving === g.id ? "Saving…" : "Save changes"}
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })}

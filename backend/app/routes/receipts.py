@@ -147,10 +147,14 @@ async def list_receipts(
     session: AsyncSession = Depends(get_session),
     current_user: dict = Depends(get_current_user),
 ) -> ReceiptListOut:
-    # Non-owner users are restricted to their granted category
-    if current_user["access_category"] != "all":
-        category = current_user["access_category"]
-    stmt = select(Receipt).where(Receipt.deleted_at.is_(None))
+    # Non-owner users are restricted to their granted categories
+    if not current_user["is_owner"] and "all" not in current_user["access_categories"]:
+        allowed = current_user["access_categories"]
+        stmt = select(Receipt).where(Receipt.deleted_at.is_(None)).where(
+            Receipt.category_variable.in_(allowed)
+        )
+    else:
+        stmt = select(Receipt).where(Receipt.deleted_at.is_(None))
     if category is not None:
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
@@ -290,7 +294,7 @@ async def get_receipt(
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
     # Enforce category-scoped access for non-owner users
-    if current_user["access_category"] != "all" and receipt.category_variable != current_user["access_category"]:
+    if not current_user["is_owner"] and "all" not in current_user["access_categories"] and receipt.category_variable not in current_user["access_categories"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return ReceiptOut.model_validate(receipt)
 

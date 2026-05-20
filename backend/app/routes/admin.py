@@ -9,6 +9,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -37,7 +38,7 @@ class AccessOut(BaseModel):
 
 class MeOut(BaseModel):
     is_owner: bool
-    access_category: str
+    access_categories: List[str]
     role: str
 
 
@@ -63,7 +64,7 @@ async def get_me(current_user: dict = Depends(get_current_user)) -> MeOut:
     """Returns the calling user's access level. Safe for all authenticated users."""
     return MeOut(
         is_owner=current_user["is_owner"],
-        access_category=current_user["access_category"],
+        access_categories=current_user["access_categories"],
         role=current_user["role"],
     )
 
@@ -87,23 +88,7 @@ async def grant_access(
     session: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_owner),
 ) -> AccessOut:
-    """Grant (or update) access for the given email."""
-    result = await session.execute(
-        select(UserAccess).where(UserAccess.email == body.email)
-    )
-    existing = result.scalar_one_or_none()
-
-    if existing:
-        existing.category = body.category
-        existing.role = body.role
-        await session.commit()
-        return AccessOut(
-            id=str(existing.id),
-            email=existing.email,
-            category=existing.category,
-            role=existing.role,
-        )
-
+    """Grant access for the given email+category. Returns existing row if duplicate."""
     access = UserAccess(
         id=uuid.uuid4(),
         email=body.email,
@@ -111,7 +96,24 @@ async def grant_access(
         role=body.role,
     )
     session.add(access)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        # email+category already exists — return existing row
+        result = await session.execute(
+            select(UserAccess).where(
+                UserAccess.email == body.email,
+                UserAccess.category == body.category,
+            )
+        )
+        existing = result.scalar_one()
+        return AccessOut(
+            id=str(existing.id),
+            email=existing.email,
+            category=existing.category,
+            role=existing.role,
+        )
     return AccessOut(
         id=str(access.id),
         email=access.email,

@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime, timezone
 from enum import Enum as PyEnum
 from typing import Any, Dict, List, Optional
-from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text, func
+from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -108,13 +108,14 @@ class UserAccess(Base):
     __tablename__ = "user_access"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     category: Mapped[str] = mapped_column(String(100), nullable=False)  # category name or "all"
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="read")  # "read" | "write"
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("idx_user_access_email", "email"),
+        UniqueConstraint("email", "category", name="uq_user_access_email_category"),
     )
 
 
