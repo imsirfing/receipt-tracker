@@ -13,7 +13,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Iterable, List, Optional
 
 from google.cloud import storage
@@ -167,7 +167,6 @@ async def _persist_receipt(
         else RecurringType.ONE_OFF
     )
 
-    from datetime import timezone as _tz
     receipt = Receipt(
         id=uuid.uuid4(),
         payee=extraction.payee,
@@ -180,7 +179,7 @@ async def _persist_receipt(
         recurring_type=recurring,
         raw_email_id=message_id,
         source="gmail_auto",
-        ingested_at=datetime.now(_tz.utc),
+        ingested_at=datetime.now(timezone.utc),
     )
     session.add(receipt)
     await session.flush()
