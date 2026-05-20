@@ -10,9 +10,14 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import logging
+
 from app.db import get_session
 from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, RecurringType
+from app.workers.gmail_ingestion import archive_gmail_message
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pending", tags=["pending"])
 
@@ -128,6 +133,10 @@ async def convert_to_receipt(
     try:
         await session.commit()
         await session.refresh(receipt)
+        try:
+            archive_gmail_message(pending.gmail_message_id)
+        except Exception as exc:
+            logger.warning("Failed to archive Gmail message %s: %s", pending.gmail_message_id, exc)
         return receipt
     except IntegrityError:
         # A receipt with this gmail_message_id already exists — clean up the

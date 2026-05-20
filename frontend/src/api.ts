@@ -133,6 +133,30 @@ export interface ConvertRequest {
   inferred_purpose?: string;
 }
 
+export interface ReceiptCreateRequest {
+  payee: string;
+  amount: number;
+  date: string;
+  category_variable: string;
+  recurring_type: string;
+  payment_category?: string;
+  payment_detail?: string;
+  inferred_purpose?: string;
+  notes?: string;
+  is_tax_deductible?: boolean;
+  reimbursement_owner?: string;
+}
+
+export const createReceipt = async (body: ReceiptCreateRequest): Promise<Receipt> => {
+  const res = await fetch(`${baseURL}/api/receipts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+};
+
 export interface PendingListResponse {
   items: PendingEmail[];
   total: number;

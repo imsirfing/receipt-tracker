@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
-import { listReceipts, markReimbursed, Receipt, updateReceipt } from "../api";
+import { createReceipt, listReceipts, markReimbursed, Receipt, ReceiptCreateRequest, updateReceipt } from "../api";
 
 const PAGE_SIZE = 50;
 
@@ -14,6 +14,9 @@ type SortKey = "date" | "payee" | "amount" | "category_variable";
 export default function ReceiptsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState<Partial<ReceiptCreateRequest>>({ recurring_type: "one_off", category_variable: "personal" });
+  const [createSaving, setCreateSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
@@ -94,7 +97,12 @@ export default function ReceiptsPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Receipts</h1>
-        <div className="flex items-center gap-3" />
+        <button
+          onClick={() => { setCreateForm({ recurring_type: "one_off", category_variable: "personal" }); setShowCreate(true); }}
+          className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          + Create Receipt
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4 items-center">
@@ -235,6 +243,83 @@ export default function ReceiptsPage() {
       )}
 
       {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} />}
+
+      {/* Create Receipt Modal */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-lg font-semibold text-slate-800 mb-4">Create Receipt</h2>
+            <div className="space-y-3">
+              {([
+                ["Payee", "payee", "text"],
+                ["Amount", "amount", "number"],
+                ["Date", "date", "date"],
+                ["Purpose", "inferred_purpose", "text"],
+                ["Payment Category", "payment_category", "text"],
+                ["Payment Detail", "payment_detail", "text"],
+                ["Notes", "notes", "text"],
+              ] as [string, keyof ReceiptCreateRequest, string][]).map(([label, field, type]) => (
+                <div key={field}>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={(createForm[field] as string | number) ?? ""}
+                    onChange={(e) => setCreateForm(f => ({ ...f, [field]: type === "number" ? parseFloat(e.target.value) : e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                <select
+                  value={createForm.category_variable ?? "personal"}
+                  onChange={(e) => setCreateForm(f => ({ ...f, category_variable: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                >
+                  {KNOWN_CATEGORIES.filter(c => c !== "uncategorized").map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Recurring</label>
+                <select
+                  value={createForm.recurring_type ?? "one_off"}
+                  onChange={(e) => setCreateForm(f => ({ ...f, recurring_type: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm"
+                >
+                  <option value="one_off">One-off</option>
+                  <option value="ongoing">Ongoing</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50">Cancel</button>
+              <button
+                disabled={createSaving}
+                onClick={async () => {
+                  if (!createForm.payee || !createForm.amount || !createForm.date) {
+                    toast.error("Payee, amount, and date are required.");
+                    return;
+                  }
+                  setCreateSaving(true);
+                  try {
+                    await createReceipt(createForm as ReceiptCreateRequest);
+                    toast.success("Receipt created!");
+                    setShowCreate(false);
+                    setPage(0);
+                  } catch (e) {
+                    toast.error("Failed to create receipt.");
+                  } finally {
+                    setCreateSaving(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {createSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

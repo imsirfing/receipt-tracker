@@ -59,6 +59,14 @@ def _build_gmail_service():
     return build("gmail", "v1", credentials=_build_gmail_credentials(), cache_discovery=False)
 
 
+def archive_gmail_message(message_id: str) -> None:
+    """Remove INBOX and UNREAD labels from a Gmail message (archive it)."""
+    service = _build_gmail_service()
+    service.users().messages().modify(
+        userId="me", id=message_id, body={"removeLabelIds": ["INBOX", "UNREAD"]}
+    ).execute()
+
+
 def _extract_header(headers: Iterable[dict], name: str) -> Optional[str]:
     for h in headers:
         if h.get("name", "").lower() == name.lower():
@@ -307,7 +315,7 @@ async def process_message(
     )
 
     service.users().messages().modify(
-        userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
+        userId="me", id=message_id, body={"removeLabelIds": ["INBOX", "UNREAD"]}
     ).execute()
 
     return receipt

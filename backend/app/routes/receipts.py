@@ -58,6 +58,20 @@ class ReceiptListOut(BaseModel):
     offset: int
 
 
+class ReceiptCreate(BaseModel):
+    payee: str
+    amount: float
+    date: _Date
+    category_variable: str
+    recurring_type: str = "one_off"
+    payment_category: Optional[str] = None
+    payment_detail: Optional[str] = None
+    inferred_purpose: Optional[str] = None
+    notes: Optional[str] = None
+    is_tax_deductible: bool = False
+    reimbursement_owner: Optional[str] = None
+
+
 class ReceiptUpdate(BaseModel):
     payee: Optional[str] = None
     amount: Optional[float] = None
@@ -68,6 +82,33 @@ class ReceiptUpdate(BaseModel):
     notes: Optional[str] = None
     is_tax_deductible: Optional[bool] = None
     reimbursement_owner: Optional[str] = None
+
+
+@router.post("", response_model=ReceiptOut, status_code=201)
+async def create_receipt(
+    body: ReceiptCreate,
+    session: AsyncSession = Depends(get_session),
+) -> ReceiptOut:
+    recurring = RecurringType.ONGOING if body.recurring_type == "ongoing" else RecurringType.ONE_OFF
+    receipt = Receipt(
+        id=uuid.uuid4(),
+        payee=body.payee,
+        amount=body.amount,
+        date=body.date,
+        inferred_purpose=body.inferred_purpose or "",
+        payment_category=body.payment_category,
+        payment_detail=body.payment_detail,
+        category_variable=body.category_variable,
+        recurring_type=recurring,
+        notes=body.notes,
+        is_tax_deductible=body.is_tax_deductible,
+        reimbursement_owner=body.reimbursement_owner,
+        raw_email_id=f"manual-{uuid.uuid4()}",
+    )
+    session.add(receipt)
+    await session.commit()
+    await session.refresh(receipt)
+    return receipt
 
 
 @router.get("", response_model=ReceiptListOut)

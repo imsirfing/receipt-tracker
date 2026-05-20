@@ -4,7 +4,7 @@ import io
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
@@ -198,7 +198,12 @@ def _upload_report(pdf_bytes: bytes) -> str:
     client = storage.Client(project=os.getenv("GCP_PROJECT_ID"))
     blob = client.bucket(bucket_name).blob(object_path)
     blob.upload_from_string(pdf_bytes, content_type="application/pdf")
-    return f"https://storage.googleapis.com/{bucket_name}/{object_path}"
+    signed_url = blob.generate_signed_url(
+        expiration=timedelta(hours=1),
+        method="GET",
+        version="v4",
+    )
+    return signed_url
 
 
 @router.post("/report", response_model=ReportResponse)
