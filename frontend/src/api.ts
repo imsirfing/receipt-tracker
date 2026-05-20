@@ -84,6 +84,11 @@ export const updateReceipt = async (id: string, patch: Partial<Receipt>) => {
   return res.data;
 };
 
+export const deleteReceipt = async (id: string): Promise<void> => {
+  const res = await fetch(`${baseURL}/api/receipts/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+};
+
 export const markReimbursed = async (id: string) => {
   const res = await api.post<Receipt>(`/api/receipts/${id}/reimburse`);
   return res.data;

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
-import { createReceipt, listReceipts, markReimbursed, Receipt, ReceiptCreateRequest, updateReceipt } from "../api";
+import { createReceipt, deleteReceipt, listReceipts, markReimbursed, Receipt, ReceiptCreateRequest, updateReceipt } from "../api";
 
 const PAGE_SIZE = 50;
 
@@ -84,6 +84,14 @@ export default function ReceiptsPage() {
     e.stopPropagation();
     await markReimbursed(id);
     await refresh();
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteReceipt(id);
+    setEditing(null);
+    setReceipts(prev => prev.filter(r => r.id !== id));
+    setTotal(prev => prev - 1);
+    toast.success("Receipt deleted.");
   };
 
   const handleSave = async (patch: Partial<Receipt>) => {
@@ -242,7 +250,7 @@ export default function ReceiptsPage() {
         </div>
       )}
 
-      {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} />}
+      {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} onDelete={handleDelete} />}
 
       {/* Create Receipt Modal */}
       {showCreate && (
@@ -328,11 +336,14 @@ function EditModal({
   receipt,
   onClose,
   onSave,
+  onDelete,
 }: {
   receipt: Receipt;
   onClose: () => void;
   onSave: (patch: Partial<Receipt>) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
+  const [deleting, setDeleting] = useState(false);
   const [payee, setPayee] = useState(receipt.payee);
   const [amount, setAmount] = useState(String(receipt.amount));
   const [date, setDate] = useState(receipt.date);
@@ -422,17 +433,28 @@ function EditModal({
             autoFocus
           />
         )}
-        <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onClose} className="px-3 py-1 text-sm">
-            Cancel
-          </button>
+        <div className="flex items-center justify-between mt-4">
           <button
-            onClick={submit}
-            disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+            onClick={async () => {
+              if (!window.confirm("Delete this receipt? This can't be undone.")) return;
+              setDeleting(true);
+              try { await onDelete(receipt.id); } finally { setDeleting(false); }
+            }}
+            disabled={deleting}
+            className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {deleting ? "Deleting…" : "Delete"}
           </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-3 py-1 text-sm">Cancel</button>
+            <button
+              onClick={submit}
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
