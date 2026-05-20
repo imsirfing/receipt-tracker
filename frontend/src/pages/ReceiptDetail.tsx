@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getAttachmentUrl, getReceipt, getReceiptAudit, updateReceipt, Receipt, AuditEntry } from "../api";
+import { getAttachmentUrl, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
 import { ArrowLeft, Pencil, X, CheckCircle, Edit3, Trash2, Clock } from "lucide-react";
 
 const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
