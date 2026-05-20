@@ -351,7 +351,12 @@ async def process_message(
         logger.warning("skipping message %s: %s", message_id, exc)
         return None
 
-    body_text = _extract_body_text(payload)[:15_000]  # cap at ~4k tokens to stay well within limits
+    # Strip long angle-bracket URLs (tracking links) that bloat the body before the 15k cap.
+    # Without this, emails like Home Depot order confirmations exhaust the limit before the order total.
+    import re as _re
+    _raw_body = _extract_body_text(payload)
+    _stripped_body = _re.sub(r'<https?://\S+>', '', _raw_body)
+    body_text = _stripped_body[:15_000]
     blobs = _collect_attachments(service, message_id, payload)
     attachment_pairs = [(b.data, b.mime_type) for b in blobs]
 
