@@ -176,14 +176,12 @@ export default function ReviewPage() {
       )}
 
       <div className="mt-4 flex gap-2">
-        {!isParseError && (
-          <button
+        <button
             onClick={() => openModal(item)}
             className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
             Create Receipt
           </button>
-        )}
         <button
           onClick={() => handleDismiss(item.id)}
           className="px-3 py-1.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
