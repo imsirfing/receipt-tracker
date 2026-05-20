@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, Inbox, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
+import { BarChart3, ClipboardList, LogOut, MessageSquare, Receipt, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
 import { triggerIngest, getIngestStatus, listPending } from "../api";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
-  { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/review", label: "Review", icon: ClipboardList },
   { to: "/receipts", label: "Receipts", icon: Receipt },
   { to: "/chat", label: "Chat report", icon: MessageSquare },
