@@ -1,28 +1,55 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listReceipts, Receipt } from "../api";
 import { SkeletonCard } from "../components/Skeleton";
 
+const PAGE_SIZE = 50;
+
 export default function InboxPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    listReceipts()
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => { setSearch(searchInput); setPage(0); }, 300);
+    return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
+  }, [searchInput]);
+
+  useEffect(() => {
+    setLoading(true);
+    listReceipts(PAGE_SIZE, page * PAGE_SIZE, undefined, undefined, search || undefined)
       .then((data) => {
-        // Sort newest first
         const rows = data.items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
         setReceipts(rows);
+        setTotal(data.total);
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, search]);
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">Inbox</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold">Inbox</h1>
+        {!loading && <span className="text-sm text-slate-400">{total} receipt{total !== 1 ? "s" : ""}</span>}
+      </div>
+
+      <div className="mb-4">
+        <input
+          type="search"
+          placeholder="Search payee, purpose, category..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm w-full max-w-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        />
+      </div>
 
       {error && <div className="text-red-600 mb-4">{error}</div>}
 
@@ -76,6 +103,22 @@ export default function InboxPage() {
           );
         })}
       </div>
+      )}
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-6 text-sm text-slate-500">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage(p => p - 1)}
+            className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50"
+          >← Prev</button>
+          <span>Page {page + 1} of {Math.ceil(total / PAGE_SIZE)}</span>
+          <button
+            disabled={(page + 1) * PAGE_SIZE >= total}
+            onClick={() => setPage(p => p + 1)}
+            className="px-3 py-1 border rounded disabled:opacity-40 hover:bg-slate-50"
+          >Next →</button>
+        </div>
       )}
     </div>
   );
