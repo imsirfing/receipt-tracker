@@ -38,15 +38,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_CORS_ORIGINS = [
+    "https://receipts.nopa.llc",
+    "https://receipt-tracker-frontend-goxuldyofq-uc.a.run.app",
+    "https://receipt-tracker-frontend-156776765895.us-central1.run.app",
+    "http://localhost:5173",
+    "http://localhost:8080",
+]
+
 # Global Framework Error Interceptor
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    # Enforce detailed exception messaging back down stderr so OpenClaw loops parse trace logs directly
     import traceback
     traceback.print_exc()
+    origin = request.headers.get("origin", "")
+    cors_headers = {}
+    if origin in _CORS_ORIGINS:
+        cors_headers["Access-Control-Allow-Origin"] = origin
+        cors_headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal Server Runtime Error Intercepted", "error_log": str(exc)}
+        content={"detail": "Internal Server Runtime Error Intercepted", "error_log": str(exc)},
+        headers=cors_headers,
     )
 
 # Security Dependency Injection Layer verifying Firebase Authorization headers

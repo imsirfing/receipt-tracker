@@ -14,8 +14,8 @@ export default function ChatReport() {
     setLoading(true);
     setError(null);
     try {
-      const { pdf_url } = await requestReport(message);
-      setPdfUrl(pdf_url);
+      const pdfUrl = await requestReport(message);
+      setPdfUrl(pdfUrl);
     } catch (err) {
       setError(String(err));
     } finally {

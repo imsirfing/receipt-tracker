@@ -131,9 +131,9 @@ export const getAttachmentUrl = async (receiptId: string, attachmentId: string):
   return res.data;
 };
 
-export const requestReport = async (message: string): Promise<{ pdf_url: string }> => {
-  const res = await api.post<{ pdf_url: string }>("/api/chat/report", { message });
-  return res.data;
+export const requestReport = async (message: string): Promise<string> => {
+  const res = await api.post("/api/chat/report", { message }, { responseType: "blob" });
+  return URL.createObjectURL(res.data);
 };
 
 export interface PendingEmail {

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from google.cloud import storage
 from pydantic import BaseModel
 from reportlab.lib import colors
@@ -37,9 +38,6 @@ CATEGORIES = {"personal", "realestate", "traverse", "edgehill"}
 class ReportRequest(BaseModel):
     message: str
 
-
-class ReportResponse(BaseModel):
-    pdf_url: str
 
 
 def _parse_intent(message: str) -> Dict[str, Optional[object]]:
@@ -206,13 +204,16 @@ def _upload_report(pdf_bytes: bytes) -> str:
     return signed_url
 
 
-@router.post("/report", response_model=ReportResponse)
+@router.post("/report")
 async def chat_report(
     payload: ReportRequest,
     session: AsyncSession = Depends(get_session),
-) -> ReportResponse:
+) -> StreamingResponse:
     filters = _parse_intent(payload.message)
     receipts = await _query_receipts(session, filters)
     pdf_bytes = _build_pdf(payload.message, receipts)
-    pdf_url = _upload_report(pdf_bytes)
-    return ReportResponse(pdf_url=pdf_url)
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=report.pdf"},
+    )
