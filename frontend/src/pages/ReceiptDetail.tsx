@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { fmtCurrency } from "../utils";
 import { getAttachmentUrl, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
 import { ArrowLeft, Pencil, X, CheckCircle, Edit3, Trash2, Clock } from "lucide-react";
 
@@ -125,7 +126,7 @@ export default function ReceiptDetailPage() {
               uncategorized ? "bg-amber-100 text-amber-800" : "bg-indigo-100 text-indigo-700"
             }`}
           >
-            ${Number(receipt.amount).toFixed(2)}
+            {fmtCurrency(receipt.amount)}
           </div>
           <button
             onClick={async () => {
@@ -188,7 +189,7 @@ export default function ReceiptDetailPage() {
               <dd className="text-slate-800">{receipt.date}</dd>
 
               <dt className="text-slate-500">Amount</dt>
-              <dd className="text-slate-800">${Number(receipt.amount).toFixed(2)}</dd>
+              <dd className="text-slate-800">{fmtCurrency(receipt.amount)}</dd>
 
               <dt className="text-slate-500">Category</dt>
               <dd>

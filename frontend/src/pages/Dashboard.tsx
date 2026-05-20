@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fmtCurrency } from "../utils";
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
   PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -154,17 +155,17 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <Card label="Total receipts" value={filteredReceipts.length.toString()} />
-        <Card label="Total spend" value={`$${totalSpend.toFixed(2)}`} />
-        <Card label="Unreimbursed" value={`$${unreimbursed.toFixed(2)}`} accent />
+        <Card label="Total spend" value={fmtCurrency(totalSpend)} />
+        <Card label="Unreimbursed" value={fmtCurrency(unreimbursed)} accent />
         <Card label="Uncategorized" value={uncategorizedCount.toString()} amber />
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Recurring spend</div>
-          <div className="text-xl md:text-2xl font-bold text-violet-600">${recurringTotal.toFixed(2)}</div>
-          <div className="text-xs text-slate-400 mt-1">vs ${oneOffTotal.toFixed(2)} one-off</div>
+          <div className="text-xl md:text-2xl font-bold text-violet-600">{fmtCurrency(recurringTotal)}</div>
+          <div className="text-xs text-slate-400 mt-1">vs {fmtCurrency(oneOffTotal)} one-off</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Avg / month</div>
-          <div className="text-xl md:text-2xl font-bold text-sky-600">${avgMonthlySpend.toFixed(2)}</div>
+          <div className="text-xl md:text-2xl font-bold text-sky-600">{fmtCurrency(avgMonthlySpend)}</div>
           <div className="text-xs text-slate-400 mt-1">across {new Set(filteredReceipts.map(r => r.date.slice(0,7))).size} months</div>
         </div>
       </div>
@@ -178,7 +179,7 @@ export default function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+              <Tooltip formatter={(v: number) => fmtCurrency(v)} />
               <Bar dataKey="total" radius={[4, 4, 0, 0]}>
                 {byCategory.map((entry) => (
                   <Cell key={entry.name} fill={categoryColor(entry.name)} />
@@ -204,7 +205,7 @@ export default function Dashboard() {
                   <Cell key={entry.name} fill={categoryColor(entry.name)} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+              <Tooltip formatter={(v: number) => fmtCurrency(v)} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
@@ -218,9 +219,9 @@ export default function Dashboard() {
         </div>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={topPayees} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <XAxis type="number" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
+            <XAxis type="number" tickFormatter={(v) => fmtCurrency(v)} tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+            <Tooltip formatter={(v: number) => fmtCurrency(v)} />
             <Bar dataKey="total" fill="#6366f1" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -231,9 +232,9 @@ export default function Dashboard() {
         <div className="text-sm font-medium text-slate-700 mb-3">Unreimbursed by category</div>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={unreimbursedByCategory} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <XAxis type="number" tickFormatter={(v) => `$${v}`} tick={{ fontSize: 11 }} />
+            <XAxis type="number" tickFormatter={(v) => fmtCurrency(v)} tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+            <Tooltip formatter={(v: number) => fmtCurrency(v)} />
             <Bar dataKey="total" radius={[0, 4, 4, 0]}>
               {unreimbursedByCategory.map((entry) => (
                 <Cell key={entry.name} fill={categoryColor(entry.name)} />
@@ -253,7 +254,7 @@ export default function Dashboard() {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="month" />
             <YAxis />
-            <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+            <Tooltip formatter={(v: number) => fmtCurrency(v)} />
             <Line type="monotone" dataKey="total" stroke="#4F46E5" strokeWidth={2} dot={{ r: 4 }} />
           </LineChart>
         </ResponsiveContainer>
@@ -272,7 +273,7 @@ export default function Dashboard() {
                 <div className="text-sm font-medium text-slate-800">{r.payee}</div>
                 <div className="text-xs text-slate-400">{r.date} · {r.category_variable || "uncategorized"}</div>
               </div>
-              <div className="text-sm font-semibold text-slate-700">${Number(r.amount).toFixed(2)}</div>
+              <div className="text-sm font-semibold text-slate-700">{fmtCurrency(r.amount)}</div>
             </div>
           ))}
         </div>

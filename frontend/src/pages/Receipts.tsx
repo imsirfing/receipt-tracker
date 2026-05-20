@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fmtCurrency } from "../utils";
 import { Camera, Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
@@ -246,7 +247,7 @@ export default function ReceiptsPage() {
                 >
                   <td className="px-3 py-2">{r.date}</td>
                   <td className="px-3 py-2">{r.payee}</td>
-                  <td className="px-3 py-2">${Number(r.amount).toFixed(2)}</td>
+                  <td className="px-3 py-2">{fmtCurrency(r.amount)}</td>
                   <td className="px-3 py-2">
                     {r.category_variable === "uncategorized" ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">uncategorized</span>
