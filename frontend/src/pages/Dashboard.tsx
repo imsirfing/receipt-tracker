@@ -6,6 +6,7 @@ import {
   PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { listReceipts, Receipt } from "../api";
+import { useUser } from "../user-context";
 
 const CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
 
@@ -26,8 +27,21 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [monthsBack, setMonthsBack] = useState(12);
+  const { me, isOwner } = useUser();
+
+  // For non-owners, restrict to their granted category; owners see all
+  const allowedCategory = (!isOwner && me?.access_category && me.access_category !== "all")
+    ? me.access_category
+    : null;
+  const singleCategory = allowedCategory !== null;
+
   const [selectedCategory, setSelectedCategory] = useState("all");
   const navigate = useNavigate();
+
+  // Auto-select the only allowed category for restricted users
+  useEffect(() => {
+    if (allowedCategory) setSelectedCategory(allowedCategory);
+  }, [allowedCategory]);
 
   useEffect(() => {
     listReceipts()
@@ -130,11 +144,13 @@ export default function Dashboard() {
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             style={{ color: selectedCategory === "all" ? undefined : categoryColor(selectedCategory) }}
           >
-            <option value="all">All categories</option>
-            {CATEGORIES.filter(c => c !== "uncategorized").map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-            <option value="uncategorized">uncategorized</option>
+            {!singleCategory && <option value="all">All categories</option>}
+            {CATEGORIES
+              .filter(c => singleCategory ? c === allowedCategory : c !== "uncategorized")
+              .map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            {!singleCategory && <option value="uncategorized">uncategorized</option>}
           </select>
           <select
             value={monthsBack}
@@ -170,7 +186,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {selectedCategory === "all" && (
+      {selectedCategory === "all" && !singleCategory && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-sm font-medium text-slate-700 mb-3">Spend by category</div>
@@ -227,7 +243,7 @@ export default function Dashboard() {
         </ResponsiveContainer>
       </div>
 
-      {selectedCategory === "all" && (
+      {selectedCategory === "all" && !singleCategory && (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
         <div className="text-sm font-medium text-slate-700 mb-3">Unreimbursed by category</div>
         <ResponsiveContainer width="100%" height={180}>

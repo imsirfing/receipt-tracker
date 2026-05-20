@@ -6,10 +6,10 @@ import { useAuth } from "../auth-context";
 import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
 
 const baseNav = [
-  { to: "/", label: "Dashboard", icon: BarChart3 },
-  { to: "/review", label: "Review", icon: ClipboardList },
-  { to: "/receipts", label: "Receipts", icon: Receipt },
-  { to: "/chat", label: "Chat report", icon: MessageSquare },
+  { to: "/", label: "Dashboard", icon: BarChart3, writeOnly: false },
+  { to: "/review", label: "Review", icon: ClipboardList, writeOnly: true },
+  { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false },
+  { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false },
 ];
 
 export default function Layout() {
@@ -19,15 +19,19 @@ export default function Layout() {
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [isOwner, setIsOwner] = useState(false);
+  const [canWrite, setCanWrite] = useState(true);
 
   useEffect(() => {
     listPending().then(data => setPendingCount(data.total)).catch(() => {});
-    getMe().then(me => setIsOwner(me.is_owner)).catch(() => {});
+    getMe().then(me => {
+      setIsOwner(me.is_owner);
+      setCanWrite(me.role === "write" || me.is_owner);
+    }).catch(() => {});
   }, []);
 
   const nav = [
-    ...baseNav,
-    ...(isOwner ? [{ to: "/admin/access", label: "Access", icon: ShieldCheck }] : []),
+    ...baseNav.filter(item => !item.writeOnly || canWrite),
+    ...(isOwner ? [{ to: "/admin/access", label: "Access", icon: ShieldCheck, writeOnly: false }] : []),
   ];
 
   const handleSync = async () => {
