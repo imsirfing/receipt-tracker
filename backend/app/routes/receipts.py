@@ -8,7 +8,7 @@ from datetime import date as _Date, datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -229,17 +229,18 @@ async def reimburse_receipt(
     return ReceiptOut.model_validate(receipt)
 
 
-@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_receipt(
     receipt_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-) -> None:
+) -> Response:
     result = await session.execute(select(Receipt).where(Receipt.id == receipt_id))
     receipt = result.scalar_one_or_none()
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
     await session.delete(receipt)
     await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 from google.cloud import storage as gcs_storage
