@@ -14,22 +14,8 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
   if (accessDenied) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <div className="text-5xl">🔒</div>
-        <h1 className="text-xl font-semibold text-slate-800">Access not granted</h1>
-        <p className="text-slate-500 text-sm max-w-sm">
-          Your account ({user.email}) hasn't been given access to this app.
-          Contact James to request access.
-        </p>
-        <button
-          onClick={() => signOut()}
-          className="mt-2 text-sm text-indigo-600 hover:underline"
-        >
-          Sign out
-        </button>
-      </div>
-    );
+    signOut();
+    return <Navigate to="/login?reason=unauthorized" replace />;
   }
   return <>{children}</>;
 }
