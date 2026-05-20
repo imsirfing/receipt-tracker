@@ -10,7 +10,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -74,6 +74,7 @@ class ReceiptUpdate(BaseModel):
 async def list_receipts(
     category: Optional[str] = Query(None),
     is_reimbursed: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
@@ -83,6 +84,16 @@ async def list_receipts(
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(is_reimbursed))
+    if search is not None and search.strip():
+        term = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Receipt.payee.ilike(term),
+                Receipt.inferred_purpose.ilike(term),
+                Receipt.payment_detail.ilike(term),
+                Receipt.payment_category.ilike(term),
+            )
+        )
 
     count_stmt = select(func.count()).select_from(stmt.subquery())
     count_result = await session.execute(count_stmt)

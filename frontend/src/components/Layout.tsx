@@ -21,7 +21,7 @@ export default function Layout() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    listPending().then(items => setPendingCount(items.length)).catch(() => {});
+    listPending().then(data => setPendingCount(data.total)).catch(() => {});
   }, []);
 
   const handleSync = async () => {

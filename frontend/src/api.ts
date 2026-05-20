@@ -69,10 +69,12 @@ export async function listReceipts(
   offset = 0,
   category?: string,
   isReimbursed?: boolean,
+  search?: string,
 ): Promise<ReceiptListResponse> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (category) params.set("category", category);
   if (isReimbursed !== undefined) params.set("is_reimbursed", String(isReimbursed));
+  if (search) params.set("search", search);
   const res = await api.get<ReceiptListResponse>(`/api/receipts?${params.toString()}`);
   return res.data;
 }
@@ -131,8 +133,21 @@ export interface ConvertRequest {
   inferred_purpose?: string;
 }
 
-export const listPending = async (): Promise<PendingEmail[]> => {
-  const res = await api.get<PendingEmail[]>("/api/pending");
+export interface PendingListResponse {
+  items: PendingEmail[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export const listPending = async (
+  search?: string,
+  limit = 20,
+  offset = 0,
+): Promise<PendingListResponse> => {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (search) params.set("search", search);
+  const res = await api.get<PendingListResponse>(`/api/pending?${params.toString()}`);
   return res.data;
 };
 

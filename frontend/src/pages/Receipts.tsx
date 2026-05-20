@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
@@ -20,8 +20,20 @@ export default function ReceiptsPage() {
 
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterReimbursed, setFilterReimbursed] = useState<string>("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDesc, setSortDesc] = useState(true);
+
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(0);
+    }, 300);
+    return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
+  }, [searchInput]);
 
   const navigate = useNavigate();
   const [editing, setEditing] = useState<Receipt | null>(null);
@@ -30,7 +42,7 @@ export default function ReceiptsPage() {
     setLoading(true);
     try {
       const reimbursedParam = filterReimbursed === "true" ? true : filterReimbursed === "false" ? false : undefined;
-      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE, filterCategory || undefined, reimbursedParam);
+      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE, filterCategory || undefined, reimbursedParam, search || undefined);
       setReceipts(data.items);
       setTotal(data.total);
     } catch (e) {
@@ -43,7 +55,7 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     refresh();
-  }, [page, filterCategory, filterReimbursed]);
+  }, [page, filterCategory, filterReimbursed, search]);
 
   const filtered = useMemo(() => {
     let rows = receipts.slice();
@@ -85,7 +97,14 @@ export default function ReceiptsPage() {
         <div className="flex items-center gap-3" />
       </div>
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
+        <input
+          type="search"
+          placeholder="Search payee, purpose, category…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        />
         <select
           className="border rounded px-2 py-1 text-sm"
           value={filterCategory}
