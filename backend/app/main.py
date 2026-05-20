@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import firebase_admin
 from firebase_admin import auth, credentials
+from app.auth import get_current_user  # noqa: F401 – re-exported for convenience
 
 # Initialize Firebase SDK inside an isolated context environment safely
 firebase_project_id = os.getenv("FIREBASE_PROJECT_ID", "mock-receipts-project")
@@ -62,28 +63,6 @@ async def global_exception_handler(request, exc):
         headers=cors_headers,
     )
 
-# Security Dependency Injection Layer verifying Firebase Authorization headers
-async def get_current_user(authorization: Optional[str] = Depends(lambda x: None)):
-    # Mock fallback bypass sequence for local development pipeline verification testing loops
-    if os.getenv("ENVIRONMENT") == "local":
-        return {"uid": "local-developer-mock-uid", "email": "jamestinsley@gmail.com"}
-        
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or malformed Authentication Authorization credentials token provided"
-        )
-    
-    token = authorization.split("Bearer ")[1]
-    try:
-        decoded_token = auth.verify_id_token(token)
-        return decoded_token
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid or expired security token provided: {str(e)}"
-        )
-
 # Operational Status Health Check Endpoint
 class SystemHealthSchema(BaseModel):
     status: str
@@ -101,8 +80,10 @@ from app.routes.chat import router as chat_router  # noqa: E402
 from app.routes.receipts import router as receipts_router  # noqa: E402
 from app.routes.ingest import router as ingest_router  # noqa: E402
 from app.routes.pending import router as pending_router  # noqa: E402
+from app.routes.admin import router as admin_router  # noqa: E402
 
 app.include_router(receipts_router)
 app.include_router(chat_router)
 app.include_router(ingest_router)
 app.include_router(pending_router)
+app.include_router(admin_router)

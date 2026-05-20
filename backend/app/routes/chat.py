@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from app.auth import get_current_user
 from google.cloud import storage
 from pydantic import BaseModel
 from reportlab.lib import colors
@@ -208,8 +209,12 @@ def _upload_report(pdf_bytes: bytes) -> str:
 async def chat_report(
     payload: ReportRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
     filters = _parse_intent(payload.message)
+    # Enforce category-scoped access for non-owner users
+    if current_user["access_category"] != "all":
+        filters["category"] = current_user["access_category"]
     receipts = await _query_receipts(session, filters)
     pdf_bytes = _build_pdf(payload.message, receipts)
     return StreamingResponse(

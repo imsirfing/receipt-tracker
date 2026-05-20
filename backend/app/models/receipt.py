@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime, timezone
 from enum import Enum as PyEnum
 from typing import Any, Dict, List, Optional
-from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text
+from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -100,6 +100,21 @@ class ReceiptAuditLog(Base):
     __table_args__ = (
         Index("idx_audit_log_receipt_id", "receipt_id"),
         Index("idx_audit_log_event_at", "event_at"),
+    )
+
+
+class UserAccess(Base):
+    """Grants a non-owner user read or write access to a specific receipt category."""
+    __tablename__ = "user_access"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)  # category name or "all"
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="read")  # "read" | "write"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_user_access_email", "email"),
     )
 
 

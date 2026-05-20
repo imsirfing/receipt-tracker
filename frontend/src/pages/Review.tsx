@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useUser } from "../user-context";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   PendingEmail,
@@ -54,6 +55,7 @@ interface ModalState {
 }
 
 export default function ReviewPage() {
+  const { canWrite } = useUser();
   const [items, setItems] = useState<PendingEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -176,18 +178,22 @@ export default function ReviewPage() {
       )}
 
       <div className="mt-4 flex gap-2">
-        <button
-            onClick={() => openModal(item)}
-            className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+        {canWrite && (
+          <button
+              onClick={() => openModal(item)}
+              className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Create Receipt
+            </button>
+        )}
+        {canWrite && (
+          <button
+            onClick={() => handleDismiss(item.id)}
+            className="px-3 py-1.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
           >
-            Create Receipt
+            Dismiss
           </button>
-        <button
-          onClick={() => handleDismiss(item.id)}
-          className="px-3 py-1.5 text-sm font-medium bg-white text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-        >
-          Dismiss
-        </button>
+        )}
       </div>
     </div>
   );

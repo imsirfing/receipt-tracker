@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from google.cloud import storage as gcs_storage
 
+from app.auth import get_current_user
 from app.db import get_session
 from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
@@ -103,7 +104,10 @@ class ReceiptUpdate(BaseModel):
 async def create_receipt(
     body: ReceiptCreate,
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> ReceiptOut:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
     recurring = RecurringType.ONGOING if body.recurring_type == "ongoing" else RecurringType.ONE_OFF
     receipt = Receipt(
         id=uuid.uuid4(),
@@ -141,7 +145,11 @@ async def list_receipts(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> ReceiptListOut:
+    # Non-owner users are restricted to their granted category
+    if current_user["access_category"] != "all":
+        category = current_user["access_category"]
     stmt = select(Receipt).where(Receipt.deleted_at.is_(None))
     if category is not None:
         stmt = stmt.where(Receipt.category_variable == category)
@@ -273,6 +281,7 @@ async def parse_receipt_image(
 async def get_receipt(
     receipt_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> ReceiptOut:
     result = await session.execute(
         select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
@@ -280,6 +289,9 @@ async def get_receipt(
     receipt = result.scalar_one_or_none()
     if receipt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
+    # Enforce category-scoped access for non-owner users
+    if current_user["access_category"] != "all" and receipt.category_variable != current_user["access_category"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return ReceiptOut.model_validate(receipt)
 
 
@@ -289,7 +301,10 @@ async def update_receipt(
     patch: ReceiptUpdate,
     edit_reason: Optional[str] = Query(None, description="Reason for this edit (logged in audit trail)"),
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> ReceiptOut:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
     result = await session.execute(
         select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
     )
@@ -325,7 +340,10 @@ async def update_receipt(
 async def reimburse_receipt(
     receipt_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> ReceiptOut:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
     result = await session.execute(select(Receipt).where(Receipt.id == receipt_id))
     receipt = result.scalar_one_or_none()
     if receipt is None:
@@ -343,7 +361,10 @@ async def delete_receipt(
     receipt_id: uuid.UUID,
     reason: Optional[str] = Query(None, description="Reason for deletion (logged in audit trail)"),
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> Response:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
     result = await session.execute(
         select(Receipt).where(Receipt.id == receipt_id, Receipt.deleted_at.is_(None))
     )

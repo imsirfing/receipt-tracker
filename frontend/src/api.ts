@@ -241,6 +241,46 @@ export const attachImage = async (receiptId: string, body: AttachImageRequest): 
   return res.data;
 };
 
+// ---------------------------------------------------------------------------
+// Admin / access management
+// ---------------------------------------------------------------------------
+
+export interface AccessGrant {
+  id: string;
+  email: string;
+  category: string;
+  role: string;
+}
+
+export interface MeInfo {
+  is_owner: boolean;
+  access_category: string;
+  role: string;
+}
+
+export const getMe = async (): Promise<MeInfo> => {
+  const res = await api.get<MeInfo>("/api/admin/me");
+  return res.data;
+};
+
+export const listAccess = async (): Promise<AccessGrant[]> => {
+  const res = await api.get<AccessGrant[]>("/api/admin/access");
+  return res.data;
+};
+
+export const grantAccess = async (
+  email: string,
+  category: string,
+  role: string,
+): Promise<AccessGrant> => {
+  const res = await api.post<AccessGrant>("/api/admin/access", { email, category, role });
+  return res.data;
+};
+
+export const revokeAccess = async (id: string): Promise<void> => {
+  await api.delete(`/api/admin/access/${id}`);
+};
+
 export async function downloadEvidencePackage(receiptId: string): Promise<void> {
   const response = await api.get(`/api/receipts/${receiptId}/evidence-package`, {
     responseType: 'blob',

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useUser } from "../user-context";
 import { fmtCurrency } from "../utils";
 import { getAttachmentUrl, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
 import { ArrowLeft, Pencil, X, CheckCircle, Edit3, Trash2, Clock } from "lucide-react";
@@ -17,6 +18,7 @@ export default function ReceiptDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const { canWrite } = useUser();
   const [editing, setEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("details");
   const [auditLog, setAuditLog] = useState<AuditEntry[] | null>(null);
@@ -145,12 +147,14 @@ export default function ReceiptDetailPage() {
           >
             {evidenceLoading ? "Generating…" : "📦 Evidence Package"}
           </button>
-          <button
-            onClick={() => setEditing(true)}
-            className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
-          >
-            <Pencil size={12} /> Edit
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
+            >
+              <Pencil size={12} /> Edit
+            </button>
+          )}
         </div>
       </div>
 

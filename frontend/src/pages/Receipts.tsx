@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUser } from "../user-context";
 import { fmtCurrency } from "../utils";
 import { Camera, Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
@@ -56,6 +57,7 @@ export default function ReceiptsPage() {
   }, [searchInput]);
 
   const navigate = useNavigate();
+  const { canWrite } = useUser();
   const [editing, setEditing] = useState<Receipt | null>(null);
 
   const refresh = async () => {
@@ -160,18 +162,22 @@ export default function ReceiptsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Receipts</h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors"
-          >
-            <Camera size={15} /> Add Receipt
-          </button>
-          <button
-            onClick={() => { setCreateForm({ recurring_type: "one_off", category_variable: "personal" }); setShowCreate(true); }}
-            className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            + Create Receipt
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <Camera size={15} /> Add Receipt
+            </button>
+          )}
+          {canWrite && (
+            <button
+              onClick={() => { setCreateForm({ recurring_type: "one_off", category_variable: "personal" }); setShowCreate(true); }}
+              className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              + Create Receipt
+            </button>
+          )}
         </div>
       </div>
 
@@ -266,7 +272,7 @@ export default function ReceiptsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 flex gap-2 justify-end">
-                    {!r.is_reimbursed && (
+                    {canWrite && !r.is_reimbursed && (
                       <button
                         onClick={(e) => handleReimburse(e, r.id)}
                         className="inline-flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded"
@@ -274,12 +280,14 @@ export default function ReceiptsPage() {
                         <Check size={12} /> reimburse
                       </button>
                     )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditing(r); }}
-                      className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded"
-                    >
-                      <Pencil size={12} /> edit
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditing(r); }}
+                        className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded"
+                      >
+                        <Pencil size={12} /> edit
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

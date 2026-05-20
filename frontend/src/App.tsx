@@ -10,6 +10,7 @@ import ReviewPage from "./pages/Review";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ChatReport = lazy(() => import("./pages/ChatReport"));
 const ReceiptDetailPage = lazy(() => import("./pages/ReceiptDetail"));
+const AccessManager = lazy(() => import("./pages/AccessManager"));
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/receipts" element={<ReceiptsPage />} />
             <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
             <Route path="/chat" element={<ChatReport />} />
+            <Route path="/admin/access" element={<AccessManager />} />
           </Route>
         </Routes>
       </Suspense>
