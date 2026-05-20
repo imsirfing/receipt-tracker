@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
+  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
   PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { listReceipts, Receipt } from "../api";
@@ -159,12 +159,12 @@ export default function Dashboard() {
         <Card label="Uncategorized" value={uncategorizedCount.toString()} amber />
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Recurring spend</div>
-          <div className="text-2xl font-bold text-violet-600">${recurringTotal.toFixed(2)}</div>
+          <div className="text-xl md:text-2xl font-bold text-violet-600">${recurringTotal.toFixed(2)}</div>
           <div className="text-xs text-slate-400 mt-1">vs ${oneOffTotal.toFixed(2)} one-off</div>
         </div>
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Avg / month</div>
-          <div className="text-2xl font-bold text-sky-600">${avgMonthlySpend.toFixed(2)}</div>
+          <div className="text-xl md:text-2xl font-bold text-sky-600">${avgMonthlySpend.toFixed(2)}</div>
           <div className="text-xs text-slate-400 mt-1">across {new Set(filteredReceipts.map(r => r.date.slice(0,7))).size} months</div>
         </div>
       </div>
@@ -199,13 +199,13 @@ export default function Dashboard() {
                 cx="50%"
                 cy="50%"
                 outerRadius={90}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
                 {pieData.map((entry) => (
                   <Cell key={entry.name} fill={categoryColor(entry.name)} />
                 ))}
               </Pie>
               <Tooltip formatter={(v: number) => `$${v.toFixed(2)}`} />
+              <Legend />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -285,7 +285,7 @@ function Card({ label, value, accent, amber }: { label: string; value: string; a
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <div className="text-sm text-slate-500">{label}</div>
-      <div className={`text-2xl font-semibold mt-1 ${accent ? "text-indigo-600" : amber ? "text-amber-600" : ""}`}>
+      <div className={`text-xl md:text-2xl font-semibold mt-1 ${accent ? "text-indigo-600" : amber ? "text-amber-600" : ""}`}>
         {value}
       </div>
     </div>

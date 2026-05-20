@@ -66,7 +66,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <aside className="w-60 bg-white border-r border-slate-200 p-4 flex flex-col">
+      <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 p-4 flex-col">
         <div className="text-lg font-semibold mb-4 text-indigo-700">Receipts</div>
         <button
           onClick={handleSync}
@@ -110,9 +110,33 @@ export default function Layout() {
           <LogOut size={14} /> Sign out
         </button>
       </aside>
-      <main className="flex-1 p-8 overflow-auto">
+      <main className="flex-1 p-4 md:p-8 pb-20 md:pb-0 overflow-auto">
         <Outlet />
       </main>
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-slate-200 flex z-40">
+        {nav.map(({ to, label, icon: Icon }) => {
+          const active = location.pathname === to;
+          const shortLabel = label === "Chat report" ? "Chat" : label;
+          return (
+            <Link
+              key={to}
+              to={to}
+              className={`flex-1 relative flex flex-col items-center justify-center py-2 min-h-[56px] text-xs ${
+                active ? "text-indigo-700" : "text-slate-500"
+              }`}
+            >
+              <Icon size={20} />
+              <span className="mt-1">{shortLabel}</span>
+              {label === "Review" && pendingCount > 0 && (
+                <span className="absolute top-1 right-1/4 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full leading-none">
+                  {pendingCount > 9 ? "9+" : pendingCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

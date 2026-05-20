@@ -30,7 +30,7 @@ export default function ChatReport() {
         Describe what you want — e.g. "Show me all Edgehill expenses this month" or "Unreimbursed traverse receipts".
       </p>
 
-      <form onSubmit={submit} className="flex gap-2 mb-6">
+      <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2 mb-6">
         <input
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -55,7 +55,15 @@ export default function ChatReport() {
               Download PDF
             </a>
           </div>
-          <iframe src={pdfUrl} title="report" className="w-full h-[600px] border" />
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="md:hidden block w-full text-center py-3 bg-indigo-600 text-white rounded-lg font-medium mb-3"
+          >
+            Open / Download PDF ↗
+          </a>
+          <iframe src={pdfUrl} title="report" className="hidden md:block w-full h-[600px] border" />
         </div>
       )}
     </div>

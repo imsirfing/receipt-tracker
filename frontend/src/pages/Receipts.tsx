@@ -119,7 +119,7 @@ export default function ReceiptsPage() {
           placeholder="Search payee, purpose, category…"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="border rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          className="border rounded px-3 py-1.5 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-indigo-300"
         />
         <select
           className="border rounded px-2 py-1 text-sm"
@@ -160,9 +160,9 @@ export default function ReceiptsPage() {
                     {k} {sortKey === k ? (sortDesc ? "↓" : "↑") : ""}
                   </th>
                 ))}
-                <th className="text-left px-3 py-2">payment category</th>
-                <th className="text-left px-3 py-2">payment detail</th>
-                <th className="text-left px-3 py-2">recurring</th>
+                <th className="hidden md:table-cell text-left px-3 py-2">payment category</th>
+                <th className="hidden md:table-cell text-left px-3 py-2">payment detail</th>
+                <th className="hidden md:table-cell text-left px-3 py-2">recurring</th>
                 <th className="text-left px-3 py-2">reimbursed</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -193,9 +193,9 @@ export default function ReceiptsPage() {
                       r.category_variable
                     )}
                   </td>
-                  <td className="px-3 py-2 text-slate-500 text-xs">{r.payment_category ?? "—"}</td>
-                  <td className="px-3 py-2 text-slate-500 text-xs max-w-xs truncate" title={r.payment_detail ?? ""}>{r.payment_detail ?? "—"}</td>
-                  <td className="px-3 py-2">{r.recurring_type}</td>
+                  <td className="hidden md:table-cell px-3 py-2 text-slate-500 text-xs">{r.payment_category ?? "—"}</td>
+                  <td className="hidden md:table-cell px-3 py-2 text-slate-500 text-xs max-w-xs truncate" title={r.payment_detail ?? ""}>{r.payment_detail ?? "—"}</td>
+                  <td className="hidden md:table-cell px-3 py-2">{r.recurring_type}</td>
                   <td className="px-3 py-2">
                     {r.is_reimbursed ? (
                       <span className="text-green-700">yes</span>
@@ -207,14 +207,14 @@ export default function ReceiptsPage() {
                     {!r.is_reimbursed && (
                       <button
                         onClick={(e) => handleReimburse(e, r.id)}
-                        className="inline-flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded"
+                        className="inline-flex items-center gap-1 text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded"
                       >
                         <Check size={12} /> reimburse
                       </button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditing(r); }}
-                      className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
+                      className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded"
                     >
                       <Pencil size={12} /> edit
                     </button>
@@ -376,8 +376,8 @@ function EditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-96 p-6">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="font-medium">Edit receipt</div>
           <button onClick={onClose}>
