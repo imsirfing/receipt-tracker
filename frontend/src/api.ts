@@ -85,7 +85,7 @@ export interface Receipt {
   ingested_at: string | null;
   created_at: string;
   updated_at: string | null;
-  attachments: Array<{ id: string; gcs_uri: string; file_type: string }>;
+  attachments: Array<{ id: string; gcs_uri: string; file_type: string; filename: string | null }>;
   notes?: string | null;
   is_tax_deductible?: boolean;
   reimbursement_owner?: string | null;
@@ -164,6 +164,20 @@ export interface AttachmentUrl {
 export const getAttachmentUrl = async (receiptId: string, attachmentId: string): Promise<AttachmentUrl> => {
   const res = await api.get<AttachmentUrl>(`/api/receipts/${receiptId}/attachments/${attachmentId}/url`);
   return res.data;
+};
+
+export const downloadAttachment = async (receiptId: string, attachmentId: string, filename: string): Promise<void> => {
+  const res = await api.get(`/api/receipts/${receiptId}/attachments/${attachmentId}/download`, {
+    responseType: "blob",
+  });
+  const blobUrl = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 };
 
 export const requestReport = async (message: string): Promise<string> => {

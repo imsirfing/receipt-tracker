@@ -478,12 +478,13 @@ async def get_receipt_audit(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{receipt_id}/attachments/{attachment_id}/url")
-async def get_attachment_url(
+@router.get("/{receipt_id}/attachments/{attachment_id}/download")
+async def download_attachment(
     receipt_id: uuid.UUID,
     attachment_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-) -> dict:
+) -> StreamingResponse:
+    """Stream attachment bytes directly from GCS (avoids signed-URL IAM requirements)."""
     result = await session.execute(
         select(Attachment).where(
             Attachment.id == attachment_id,
@@ -500,13 +501,41 @@ async def get_attachment_url(
 
     client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
     blob = client.bucket(bucket_name).blob(blob_path)
-    url = blob.generate_signed_url(
-        expiration=timedelta(hours=1),
-        method="GET",
-        version="v4",
+    try:
+        data = blob.download_as_bytes()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not retrieve file from storage: {exc}") from exc
+
+    filename = attachment.filename or blob_path.split("/")[-1]
+    content_type = attachment.file_type or "application/octet-stream"
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-    filename = blob_path.split("/")[-1]
-    return {"url": url, "file_type": attachment.file_type, "filename": filename}
+
+
+@router.get("/{receipt_id}/attachments/{attachment_id}/url")
+async def get_attachment_url(
+    receipt_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Kept for backward compat — returns a proxy download URL instead of a signed GCS URL."""
+    result = await session.execute(
+        select(Attachment).where(
+            Attachment.id == attachment_id,
+            Attachment.receipt_id == receipt_id,
+        )
+    )
+    attachment = result.scalar_one_or_none()
+    if attachment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="attachment not found")
+
+    filename = attachment.filename or attachment.gcs_uri.split("/")[-1]
+    # Return a proxy URL pointing to the /download endpoint instead of a signed GCS URL
+    download_path = f"/api/receipts/{receipt_id}/attachments/{attachment_id}/download"
+    return {"url": download_path, "file_type": attachment.file_type, "filename": filename}
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUser } from "../user-context";
 import { fmtCurrency } from "../utils";
-import { getAttachmentUrl, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
+import { downloadAttachment, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
 import { ArrowLeft, Pencil, X, CheckCircle, Edit3, Trash2, Clock } from "lucide-react";
 
 const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
@@ -58,14 +58,14 @@ export default function ReceiptDetailPage() {
     setAuditLog(null);
   };
 
-  const handleDownload = async (attachmentId: string) => {
+  const handleDownload = async (att: { id: string; gcs_uri: string; filename?: string | null }) => {
     if (!id) return;
-    setDownloadingId(attachmentId);
+    setDownloadingId(att.id);
+    const filename = att.filename || att.gcs_uri.split("/").pop() || att.id;
     try {
-      const result = await getAttachmentUrl(id, attachmentId);
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      await downloadAttachment(id, att.id, filename);
     } catch (e) {
-      alert("Failed to get download URL: " + String(e));
+      alert("Failed to download attachment: " + String(e));
     } finally {
       setDownloadingId(null);
     }
@@ -279,11 +279,11 @@ export default function ReceiptDetailPage() {
                     <div key={att.id} className="flex items-center justify-between py-1">
                       <span className="text-sm text-slate-700 truncate mr-4">{filename}</span>
                       <button
-                        onClick={() => handleDownload(att.id)}
+                        onClick={() => handleDownload(att)}
                         disabled={isDownloading}
                         className="shrink-0 inline-flex items-center gap-1 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg"
                       >
-                        {isDownloading ? "Getting link…" : "Download"}
+                        {isDownloading ? "Downloading…" : "Download"}
                       </button>
                     </div>
                   );
