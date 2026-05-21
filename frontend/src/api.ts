@@ -110,6 +110,11 @@ export const markReimbursed = async (id: string) => {
   return res.data;
 };
 
+export const bulkMarkReimbursed = async (ids: string[]): Promise<{ updated: number }> => {
+  const res = await api.post<{ updated: number }>(`/api/receipts/bulk-reimburse`, { ids });
+  return res.data;
+};
+
 export const getReceipt = async (id: string): Promise<Receipt> => {
   const res = await api.get<Receipt>(`/api/receipts/${id}`);
   return res.data;

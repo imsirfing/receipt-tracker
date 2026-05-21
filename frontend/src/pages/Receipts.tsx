@@ -7,6 +7,7 @@ import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
 import {
   attachImage,
+  bulkMarkReimbursed,
   createReceipt,
   deleteReceipt,
   listReceipts,
@@ -59,6 +60,8 @@ export default function ReceiptsPage() {
   const navigate = useNavigate();
   const { canWrite } = useUser();
   const [editing, setEditing] = useState<Receipt | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -103,6 +106,52 @@ export default function ReceiptsPage() {
     e.stopPropagation();
     await markReimbursed(id);
     await refresh();
+  };
+
+  const handleBulkReimburse = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const result = await bulkMarkReimbursed(Array.from(selectedIds));
+      toast.success(`Marked ${result.updated} receipt${result.updated !== 1 ? "s" : ""} as reimbursed.`);
+      setSelectedIds(new Set());
+      await refresh();
+    } catch (e) {
+      toast.error("Bulk reimburse failed.");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  // Unreimbursed receipts visible in the current filtered view
+  const selectableIds = filtered.filter(r => !r.is_reimbursed).map(r => r.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+  const someSelected = selectableIds.some(id => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        selectableIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        selectableIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const toggleSelect = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -181,6 +230,26 @@ export default function ReceiptsPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
+          <span className="text-sm text-indigo-700 font-medium">{selectedIds.size} selected</span>
+          <button
+            onClick={handleBulkReimburse}
+            disabled={bulkLoading}
+            className="inline-flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg disabled:opacity-50 font-medium"
+          >
+            <Check size={14} /> {bulkLoading ? "Marking…" : "Mark reimbursed"}
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-slate-500 hover:text-slate-700 ml-auto"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3 mb-4 items-center">
         <input
           type="search"
@@ -219,6 +288,18 @@ export default function ReceiptsPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100 text-slate-600">
               <tr>
+                <th className="px-3 py-2 w-8">
+                  {canWrite && selectableIds.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                      onChange={toggleSelectAll}
+                      className="cursor-pointer"
+                      onClick={e => e.stopPropagation()}
+                    />
+                  )}
+                </th>
                 {(["date", "payee", "amount", "category_variable"] as SortKey[]).map((k) => (
                   <th
                     key={k}
@@ -240,7 +321,7 @@ export default function ReceiptsPage() {
                 [...Array(6)].map((_, i) => <SkeletonRow key={i} />)
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-12 text-slate-400">
+                  <td colSpan={10} className="text-center py-12 text-slate-400">
                     <div className="text-3xl mb-2">🧾</div>
                     <div className="text-sm">No receipts found. Try adjusting your filter or syncing the inbox.</div>
                   </td>
@@ -249,8 +330,22 @@ export default function ReceiptsPage() {
                 <tr
                   key={r.id}
                   onClick={() => navigate(`/receipts/${r.id}`)}
-                  className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${r.category_variable === "uncategorized" ? "bg-amber-50 hover:bg-amber-100" : ""}`}
+                  className={`border-t border-slate-100 cursor-pointer hover:bg-slate-50 ${
+                    selectedIds.has(r.id) ? "bg-indigo-50" :
+                    r.category_variable === "uncategorized" ? "bg-amber-50 hover:bg-amber-100" : ""
+                  }`}
                 >
+                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                    {canWrite && !r.is_reimbursed && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(r.id)}
+                        onChange={() => {}}
+                        onClick={(e) => toggleSelect(e, r.id)}
+                        className="cursor-pointer"
+                      />
+                    )}
+                  </td>
                   <td className="px-3 py-2">{r.date}</td>
                   <td className="px-3 py-2">{r.payee}</td>
                   <td className="px-3 py-2">{fmtCurrency(r.amount)}</td>

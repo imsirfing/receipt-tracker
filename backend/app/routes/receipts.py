@@ -360,6 +360,33 @@ async def reimburse_receipt(
     return ReceiptOut.model_validate(receipt)
 
 
+class BulkReimburseRequest(BaseModel):
+    ids: List[uuid.UUID]
+
+
+@router.post("/bulk-reimburse")
+async def bulk_reimburse_receipts(
+    body: BulkReimburseRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
+    if not body.ids:
+        return {"updated": 0}
+    now = datetime.now(timezone.utc)
+    result = await session.execute(select(Receipt).where(Receipt.id.in_(body.ids)))
+    receipts = result.scalars().all()
+    count = 0
+    for receipt in receipts:
+        if not receipt.is_reimbursed:
+            receipt.is_reimbursed = True
+            receipt.reimbursed_at = now
+            count += 1
+    await session.commit()
+    return {"updated": count}
+
+
 @router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_receipt(
     receipt_id: uuid.UUID,
