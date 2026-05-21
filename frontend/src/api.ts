@@ -6,6 +6,9 @@ const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 export const api: AxiosInstance = axios.create({ baseURL });
 
 api.interceptors.request.use(async (config) => {
+  // Wait for Firebase to restore auth state before checking currentUser.
+  // Without this, currentUser is null on mobile until the async restore completes.
+  await auth.authStateReady();
   const user = auth.currentUser;
   if (user) {
     const token = await user.getIdToken();
