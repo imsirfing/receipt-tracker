@@ -1,18 +1,20 @@
 import axios, { AxiosInstance } from "axios";
-import { auth } from "./firebase";
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 export const api: AxiosInstance = axios.create({ baseURL });
 
-api.interceptors.request.use(async (config) => {
-  // Wait for Firebase to restore auth state before checking currentUser.
-  await auth.authStateReady();
-  const user = auth.currentUser;
-  if (user) {
-    // Force-refresh ensures we never send an expired token.
-    const token = await user.getIdToken(true);
-    config.headers.Authorization = `Bearer ${token}`;
+// Token is set by AuthProvider via setApiToken() whenever auth state changes.
+// This avoids relying on auth.currentUser which can be null on mobile
+// due to async Firebase initialization timing.
+let _apiToken: string | null = null;
+export function setApiToken(token: string | null) {
+  _apiToken = token;
+}
+
+api.interceptors.request.use((config) => {
+  if (_apiToken) {
+    config.headers.Authorization = `Bearer ${_apiToken}`;
   }
   return config;
 });

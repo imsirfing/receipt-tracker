@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { getRedirectResult, onAuthStateChanged, signOut, User } from "firebase/auth";
+import { onIdTokenChanged, signOut, User } from "firebase/auth";
 import { auth } from "./firebase";
+import { setApiToken } from "./api";
 
 interface AuthState {
   user: User | null;
@@ -19,13 +20,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Process redirect result from signInWithRedirect (mobile flow).
-    // This must be called before onAuthStateChanged to ensure the user is set.
-    getRedirectResult(auth).catch((err) => {
-      console.error("redirect result error", err);
-    });
-
-    return onAuthStateChanged(auth, (u) => {
+    // onIdTokenChanged fires on sign-in, sign-out, and token refresh.
+    // We push the fresh token into api.ts so the interceptor never reads
+    // auth.currentUser directly (avoids mobile timing issues).
+    return onIdTokenChanged(auth, async (u) => {
+      if (u) {
+        const token = await u.getIdToken();
+        setApiToken(token);
+      } else {
+        setApiToken(null);
+      }
       setUser(u);
       setLoading(false);
     });

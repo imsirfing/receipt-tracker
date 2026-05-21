@@ -1,10 +1,7 @@
-import { signInWithPopup, signInWithRedirect } from "firebase/auth";
+import { signInWithPopup } from "firebase/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { auth, googleProvider } from "../firebase";
 import { LogIn } from "lucide-react";
-
-// On mobile browsers popups are often blocked; redirect is more reliable.
-const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,13 +10,8 @@ export default function Login() {
 
   const handleSignIn = async () => {
     try {
-      if (isMobile) {
-        // Redirect flow: navigates away then back; getRedirectResult handles it in AuthProvider.
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        await signInWithPopup(auth, googleProvider);
-        navigate("/");
-      }
+      await signInWithPopup(auth, googleProvider);
+      navigate("/");
     } catch (err) {
       console.error("sign-in failed", err);
     }
