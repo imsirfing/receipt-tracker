@@ -547,38 +547,36 @@ async def get_evidence_package(
     if receipt.raw_email_id and email_provenance:
         email_screenshot_bytes = await screenshot_gmail_message(receipt.raw_email_id)
 
-    # 4. Generate signed URLs for attachments
-    signed_attachments = []
-    try:
-        from google.cloud import storage as gcs_storage
-        gcs_client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
-        for att in receipt.attachments:
-            gcs_uri = att.gcs_uri
-            _, _, rest = gcs_uri.partition("gs://")
-            bucket_name, _, blob_path = rest.partition("/")
-            blob = gcs_client.bucket(bucket_name).blob(blob_path)
-            signed_url = blob.generate_signed_url(
-                expiration=timedelta(hours=1),
-                method="GET",
-                version="v4",
-            )
-            filename = blob_path.split("/")[-1]
-            signed_attachments.append({
-                "id": att.id,
-                "filename": att.filename or filename,
-                "file_type": att.file_type,
-                "signed_url": signed_url,
-            })
-    except Exception:
-        # If GCS is unavailable, attach without signed URLs
-        for att in receipt.attachments:
-            filename = att.gcs_uri.split("/")[-1]
-            signed_attachments.append({
-                "id": att.id,
-                "filename": att.filename or filename,
-                "file_type": att.file_type,
-                "signed_url": None,
-            })
+    # 4. Download attachment bytes from GCS for embedding in PDF
+    attachment_data = []
+    if receipt.attachments:
+        try:
+            from google.cloud import storage as gcs_storage
+            gcs_client = gcs_storage.Client(project=os.getenv("GCP_PROJECT_ID"))
+            for att in receipt.attachments:
+                gcs_uri = att.gcs_uri
+                _, _, rest = gcs_uri.partition("gs://")
+                bucket_name, _, blob_path = rest.partition("/")
+                blob = gcs_client.bucket(bucket_name).blob(blob_path)
+                filename = att.filename or blob_path.split("/")[-1]
+                try:
+                    img_bytes = blob.download_as_bytes()
+                except Exception:
+                    img_bytes = None
+                attachment_data.append({
+                    "id": att.id,
+                    "filename": filename,
+                    "file_type": att.file_type,
+                    "bytes": img_bytes,
+                })
+        except Exception:
+            for att in receipt.attachments:
+                attachment_data.append({
+                    "id": att.id,
+                    "filename": att.filename or att.gcs_uri.split("/")[-1],
+                    "file_type": att.file_type,
+                    "bytes": None,
+                })
 
     # 5. Build PDF
     try:
@@ -681,25 +679,33 @@ async def get_evidence_package(
             img = RLImage(img_buf, width=6.5 * inch, kind="proportional")
             story.append(img)
 
-        # ── Page 4+: Attachment Links ──
-        if signed_attachments:
+        # ── Page 4+: Attachments (embedded images) ──
+        if attachment_data:
+            from reportlab.platypus import Image as RLImage
+            import io as _io
             story.append(PageBreak())
             story.append(Paragraph("Attachments", styles["Title"]))
             story.append(Spacer(1, 0.15 * inch))
             story.append(HRFlowable(width="100%", thickness=1, color="#cccccc"))
             story.append(Spacer(1, 0.2 * inch))
-            story.append(Paragraph("Original files preserved in Google Cloud Storage.", styles["Italic"]))
-            story.append(Spacer(1, 0.15 * inch))
 
-            for att in signed_attachments:
+            for att in attachment_data:
                 story.append(Paragraph(f"<b>Filename:</b> {att['filename']}", styles["Normal"]))
                 story.append(Paragraph(f"<b>Type:</b> {att['file_type']}", styles["Normal"]))
-                if att["signed_url"]:
-                    url = att["signed_url"]
-                    story.append(Paragraph(f'<b>URL (1 hour):</b> <a href="{url}">{url[:80]}...</a>', styles["Normal"]))
+                story.append(Spacer(1, 0.1 * inch))
+                image_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+                if att["bytes"] and att["file_type"] in image_types:
+                    try:
+                        img_buf = _io.BytesIO(att["bytes"])
+                        img = RLImage(img_buf, width=6.5 * inch, kind="proportional")
+                        story.append(img)
+                    except Exception:
+                        story.append(Paragraph("(Image could not be rendered)", styles["Italic"]))
+                elif att["bytes"] is None:
+                    story.append(Paragraph("(File unavailable — could not retrieve from storage)", styles["Italic"]))
                 else:
-                    story.append(Paragraph("<b>URL:</b> unavailable", styles["Normal"]))
-                story.append(Spacer(1, 0.15 * inch))
+                    story.append(Paragraph(f"(Non-image file: {att['file_type']})", styles["Italic"]))
+                story.append(Spacer(1, 0.3 * inch))
 
         doc.build(story)
         buffer.seek(0)

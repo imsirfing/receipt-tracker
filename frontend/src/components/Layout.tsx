@@ -148,6 +148,14 @@ export default function Layout() {
           );
         })}
         <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-xs text-slate-500 disabled:opacity-50"
+        >
+          <RefreshCw size={20} className={syncing ? "animate-spin" : ""} />
+          <span className="mt-1">{syncing ? "Syncing" : "Sync"}</span>
+        </button>
+        <button
           onClick={() => signOut()}
           className="flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-xs text-slate-500"
         >
