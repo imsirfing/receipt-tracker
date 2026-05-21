@@ -7,15 +7,30 @@ export const api: AxiosInstance = axios.create({ baseURL });
 
 api.interceptors.request.use(async (config) => {
   // Wait for Firebase to restore auth state before checking currentUser.
-  // Without this, currentUser is null on mobile until the async restore completes.
   await auth.authStateReady();
   const user = auth.currentUser;
   if (user) {
-    const token = await user.getIdToken();
+    // Force-refresh ensures we never send an expired token.
+    const token = await user.getIdToken(true);
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+// Catch 401s globally and throw a readable error.
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) {
+      const detail = err.response?.data?.detail ?? "Session expired";
+      return Promise.reject(new Error(`Auth error: ${detail}. Please sign out and sign back in.`));
+    }
+    if (err?.response?.data?.detail) {
+      return Promise.reject(new Error(err.response.data.detail));
+    }
+    return Promise.reject(err);
+  }
+);
 
 export interface IngestStarted {
   status: string;
