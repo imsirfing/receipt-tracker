@@ -147,6 +147,13 @@ export default function Layout() {
             </Link>
           );
         })}
+        <button
+          onClick={() => signOut()}
+          className="flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] text-xs text-slate-500"
+        >
+          <LogOut size={20} />
+          <span className="mt-1">Sign out</span>
+        </button>
       </nav>
     </div>
   );
