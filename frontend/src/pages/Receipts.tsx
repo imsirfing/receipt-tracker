@@ -5,6 +5,7 @@ import { fmtCurrency } from "../utils";
 import { Camera, Check, Pencil, X } from "lucide-react";
 import { SkeletonRow } from "../components/Skeleton";
 import { toast } from "sonner";
+import { auth } from "../firebase";
 import {
   attachImage,
   bulkMarkReimbursed,
@@ -535,6 +536,13 @@ function UploadReceiptModal({
       toast.error("Payee, amount, and date are required.");
       return;
     }
+    // Explicit auth guard: surface the problem immediately instead of
+    // letting the request fail silently without a token.
+    await auth.authStateReady();
+    if (!auth.currentUser) {
+      toast.error("Not signed in — please sign out and sign back in.");
+      return;
+    }
     setSaving(true);
     try {
       const receipt = await createReceipt(form as ReceiptCreateRequest);
@@ -560,7 +568,10 @@ function UploadReceiptModal({
           <h2 className="text-lg font-semibold text-slate-800">Review Parsed Receipt</h2>
           <button onClick={onClose}><X size={18} /></button>
         </div>
-        <p className="text-xs text-slate-500 mb-4">AI extracted these fields — review and edit before saving.</p>
+        <p className="text-xs text-slate-500 mb-1">AI extracted these fields — review and edit before saving.</p>
+        <p className="text-xs mb-4 font-mono {auth.currentUser ? 'text-green-600' : 'text-red-500'}">
+          {auth.currentUser ? `✓ signed in as ${auth.currentUser.email}` : '✗ not signed in'}
+        </p>
         <div className="space-y-3">
           {([
             ["Payee", "payee", "text"],
