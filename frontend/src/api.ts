@@ -132,8 +132,7 @@ export const updateReceipt = async (id: string, patch: Partial<Receipt>) => {
 };
 
 export const deleteReceipt = async (id: string): Promise<void> => {
-  const res = await fetch(`${baseURL}/api/receipts/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(await res.text());
+  await api.delete(`/api/receipts/${id}`);
 };
 
 export const markReimbursed = async (id: string) => {
@@ -210,13 +209,8 @@ export interface ReceiptCreateRequest {
 }
 
 export const createReceipt = async (body: ReceiptCreateRequest): Promise<Receipt> => {
-  const res = await fetch(`${baseURL}/api/receipts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const res = await api.post<Receipt>("/api/receipts", body);
+  return res.data;
 };
 
 export interface PendingListResponse {

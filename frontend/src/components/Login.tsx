@@ -1,35 +1,17 @@
-import { signInWithPopup, signInWithRedirect } from "firebase/auth";
-import { useEffect } from "react";
+import { signInWithPopup } from "firebase/auth";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { auth, googleProvider } from "../firebase";
-import { useAuth } from "../auth-context";
 import { LogIn } from "lucide-react";
-
-// Mobile Chrome opens signInWithPopup in a new tab — auth result never
-// returns to the opener. signInWithRedirect is the correct flow for mobile.
-const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export default function Login() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const unauthorized = params.get("reason") === "unauthorized";
-  const { user } = useAuth();
-
-  // After redirect sign-in, onIdTokenChanged fires and sets user in context.
-  // Navigate to app once that happens.
-  useEffect(() => {
-    if (user) navigate("/");
-  }, [user, navigate]);
 
   const handleSignIn = async () => {
     try {
-      if (isMobile) {
-        // Page navigates away to Google; returns via redirect.
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        await signInWithPopup(auth, googleProvider);
-        navigate("/");
-      }
+      await signInWithPopup(auth, googleProvider);
+      navigate("/");
     } catch (err) {
       console.error("sign-in failed", err);
     }
