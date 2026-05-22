@@ -231,6 +231,40 @@ async def get_unreimbursed_report(
             row[cat] = round(stacked_map[iso_m].get(cat, 0), 2)
         stacked_by_month.append(row)
 
+    # --- By payment_category ---
+    _UNASSIGNED = "Unassigned"
+    pay_totals: Dict[str, float] = defaultdict(float)
+    pay_counts: Dict[str, int] = defaultdict(int)
+    for r in all_receipts:
+        pcat = r.payment_category or _UNASSIGNED
+        pay_totals[pcat] += float(r.amount)
+        pay_counts[pcat] += 1
+
+    by_payment_category = [
+        CategoryStat(
+            category=pcat,
+            total=round(pay_totals[pcat], 2),
+            count=pay_counts[pcat],
+            pct=round((pay_totals[pcat] / grand_total) * 100, 1) if grand_total else 0,
+        )
+        for pcat in sorted(pay_totals, key=lambda c: pay_totals[c], reverse=True)
+    ]
+    payment_categories = [s.category for s in by_payment_category]
+
+    # --- Stacked by month × payment_category ---
+    pay_stacked_map: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for r in all_receipts:
+        iso_month = r.date.strftime("%Y-%m")
+        pcat = r.payment_category or _UNASSIGNED
+        pay_stacked_map[iso_month][pcat] += float(r.amount)
+
+    stacked_by_month_payment = []
+    for iso_m in sorted(pay_stacked_map):
+        row_p: Dict[str, Any] = {"month": _month_label(iso_m)}
+        for pcat in payment_categories:
+            row_p[pcat] = round(pay_stacked_map[iso_m].get(pcat, 0), 2)
+        stacked_by_month_payment.append(row_p)
+
     # --- Paginated receipt list ---
     paginated = all_receipts[offset: offset + limit]
     receipt_lines = [
