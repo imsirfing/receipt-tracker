@@ -3,10 +3,12 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import firebase_admin
 from firebase_admin import auth, credentials
 from app.auth import get_current_user  # noqa: F401 – re-exported for convenience
+from app.db import get_session as get_db_session
 
 # Initialize Firebase SDK inside an isolated context environment safely
 firebase_project_id = os.getenv("FIREBASE_PROJECT_ID", "mock-receipts-project")
@@ -68,11 +70,67 @@ class SystemHealthSchema(BaseModel):
     status: str
     environment: str
 
+
+class DetailedHealthSchema(BaseModel):
+    status: str
+    environment: str
+    database: str        # "ok" | "error: <msg>"
+    gmail_token: str     # "ok" | "error: <msg>" | "skipped"
+
+
 @app.get("/api/health", response_model=SystemHealthSchema, status_code=status.HTTP_200_OK)
 async def health_check():
+    """Lightweight liveness probe used by Cloud Run."""
     return {
         "status": "operational",
-        "environment": os.getenv("ENVIRONMENT", "local")
+        "environment": os.getenv("ENVIRONMENT", "local"),
+    }
+
+
+@app.get("/api/health/detailed", response_model=DetailedHealthSchema)
+async def health_check_detailed(
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Deep health check: verifies DB connectivity and Gmail token validity.
+    Call this from monitoring / alerting (not the Cloud Run liveness probe).
+    """
+    from sqlalchemy import text
+
+    # ── DB check ──
+    db_status = "ok"
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception as exc:
+        db_status = f"error: {exc}"
+
+    # ── Gmail token check ──
+    gmail_status = "skipped"
+    refresh_token = os.getenv("GMAIL_REFRESH_TOKEN")
+    client_id = os.getenv("GMAIL_CLIENT_ID")
+    client_secret = os.getenv("GMAIL_CLIENT_SECRET")
+    if refresh_token and client_id and client_secret:
+        try:
+            import google.auth.transport.requests as gtr
+            import google.oauth2.credentials as gcreds
+            creds = gcreds.Credentials(
+                token=None,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+            creds.refresh(gtr.Request())
+            gmail_status = "ok"
+        except Exception as exc:
+            gmail_status = f"error: {exc}"
+
+    overall = "ok" if (db_status == "ok" and gmail_status in ("ok", "skipped")) else "degraded"
+    return {
+        "status": overall,
+        "environment": os.getenv("ENVIRONMENT", "local"),
+        "database": db_status,
+        "gmail_token": gmail_status,
     }
 
 

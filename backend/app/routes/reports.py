@@ -30,6 +30,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 # ---------------------------------------------------------------------------
 
 class ReportSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     total: float
     count: int
     avg: float
@@ -38,6 +39,7 @@ class ReportSummary(BaseModel):
 
 
 class CategoryStat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     category: str
     total: float
     count: int
@@ -45,6 +47,7 @@ class CategoryStat(BaseModel):
 
 
 class MonthStat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     month: str         # "2026-01"
     label: str         # "Jan 2026"
     total: float
@@ -68,6 +71,7 @@ class ReceiptLine(BaseModel):
 
 
 class UnreimbursedReportOut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     # filter echo-back
     filter_by: Optional[str]
     filter_value: Optional[str]
