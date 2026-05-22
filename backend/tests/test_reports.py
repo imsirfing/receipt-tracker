@@ -28,7 +28,7 @@ def test_unreimbursed_report_out_declares_all_fields():
     This is the test that would have caught today's bug immediately —
     fields computed but not declared in the model are silently dropped by Pydantic.
     """
-    from app.routes.reports import UnreimbursedReportOut
+    from app.schemas.reports import UnreimbursedReportOut
 
     required = [
         # Core
@@ -56,7 +56,7 @@ def test_response_models_forbid_extra():
     All response models must have extra='forbid' so unexpected fields raise
     a ValidationError instead of being silently dropped.
     """
-    from app.routes.reports import (
+    from app.schemas.reports import (
         CategoryStat,
         MonthStat,
         ReportSummary,
@@ -73,7 +73,7 @@ def test_response_models_forbid_extra():
 @pytest.mark.unit
 def test_unreimbursed_report_out_round_trips():
     """UnreimbursedReportOut can be instantiated and serialised with all fields."""
-    from app.routes.reports import (
+    from app.schemas.reports import (
         CategoryStat,
         MonthStat,
         ReceiptLine,

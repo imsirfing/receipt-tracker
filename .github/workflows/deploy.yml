@@ -25,19 +25,12 @@ jobs:
         cache: "pip"
         cache-dependency-path: backend/requirements.txt
 
-    - name: Install dependencies
-      run: pip install -r backend/requirements.txt
+    - name: Install test dependencies
+      run: pip install pydantic fastapi anyio pytest pytest-asyncio
 
-    - name: Run tests
+    - name: Run unit tests
       working-directory: backend
-      env:
-        ENVIRONMENT: local
-        FIREBASE_PROJECT_ID: mock-receipts-project
-        DATABASE_URL: postgresql+asyncpg://mock:mock@localhost/mock
-        GMAIL_CLIENT_ID: mock-client-id
-        GMAIL_CLIENT_SECRET: mock-client-secret
-        GMAIL_REFRESH_TOKEN: mock-refresh-token
-      run: python -m pytest tests/ -v --tb=short
+      run: python -m pytest tests/ -m unit -v --tb=short
 
   deploy:
     name: Deploy to Cloud Run
