@@ -33,6 +33,8 @@ class Receipt(Base):
     reimbursement_owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_reimbursed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     reimbursed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    reimbursed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    reimbursement_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     raw_email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual", server_default="manual")
     ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -52,6 +54,7 @@ class Receipt(Base):
         Index("idx_receipts_is_reimbursed", "is_reimbursed"),
         Index("idx_receipts_raw_email_id", "raw_email_id"),
         Index("idx_receipts_deleted_at", "deleted_at"),
+        Index("idx_receipts_reimbursed_date_category", "is_reimbursed", "date", "category_variable"),
     )
 
     def to_audit_dict(self) -> Dict[str, Any]:

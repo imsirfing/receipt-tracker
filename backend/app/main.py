@@ -81,9 +81,11 @@ from app.routes.receipts import router as receipts_router  # noqa: E402
 from app.routes.ingest import router as ingest_router  # noqa: E402
 from app.routes.pending import router as pending_router  # noqa: E402
 from app.routes.admin import router as admin_router  # noqa: E402
+from app.routes.reports import router as reports_router  # noqa: E402
 
 app.include_router(receipts_router)
 app.include_router(chat_router)
 app.include_router(ingest_router)
 app.include_router(pending_router)
 app.include_router(admin_router)
+app.include_router(reports_router)
