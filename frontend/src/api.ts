@@ -375,6 +375,9 @@ export interface UnreimbursedReport {
   by_month: MonthStat[];
   stacked_by_month: Array<Record<string, string | number>>;
   categories: string[];
+  by_payment_category: CategoryStat[];
+  stacked_by_month_payment: Array<Record<string, string | number>>;
+  payment_categories: string[];
   receipts: ReportReceiptLine[];
 }
 

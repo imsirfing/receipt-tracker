@@ -164,6 +164,9 @@ async def get_unreimbursed_report(
             by_month=[],
             stacked_by_month=[],
             categories=[],
+            by_payment_category=[],
+            stacked_by_month_payment=[],
+            payment_categories=[],
             receipts=[],
         )
 
@@ -263,5 +266,8 @@ async def get_unreimbursed_report(
         by_month=by_month,
         stacked_by_month=stacked_by_month,
         categories=categories,
+        by_payment_category=by_payment_category,
+        stacked_by_month_payment=stacked_by_month_payment,
+        payment_categories=payment_categories,
         receipts=receipt_lines,
     )
