@@ -294,7 +294,7 @@ export default function Reports() {
                     cx="50%"
                     cy="50%"
                     outerRadius={90}
-                    label={({ name, pct }) => `${name} ${pct?.toFixed(1) ?? ""}%`}
+                    label={({ name, percent }: any) => percent > 0.03 ? `${name} ${(percent * 100).toFixed(1)}%` : ""}
                   >
                     {pieData.map((entry) => (
                       <Cell key={entry.name} fill={catColor(entry.idx)} />

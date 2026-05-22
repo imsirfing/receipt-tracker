@@ -214,17 +214,18 @@ async def get_unreimbursed_report(
 
     # --- Stacked by month (category × month matrix for stacked bar chart) ---
     # Shape: [{ "month": "Jan 2026", "Travel": 150.00, "Meals": 80.00 }, ...]
+    # Key by ISO month string for correct chronological sort, convert to label for display.
     stacked_map: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for r in all_receipts:
-        month_label = _month_label(r.date.strftime("%Y-%m"))
+        iso_month = r.date.strftime("%Y-%m")
         cat = r.category_variable or "Uncategorized"
-        stacked_map[month_label][cat] += float(r.amount)
+        stacked_map[iso_month][cat] += float(r.amount)
 
     stacked_by_month = []
-    for m in sorted(stacked_map):
-        row: Dict[str, Any] = {"month": m}
+    for iso_m in sorted(stacked_map):  # sorts chronologically as ISO strings
+        row: Dict[str, Any] = {"month": _month_label(iso_m)}
         for cat in categories:
-            row[cat] = round(stacked_map[m].get(cat, 0), 2)
+            row[cat] = round(stacked_map[iso_m].get(cat, 0), 2)
         stacked_by_month.append(row)
 
     # --- Paginated receipt list ---
