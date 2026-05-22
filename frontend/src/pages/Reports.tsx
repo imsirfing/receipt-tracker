@@ -70,6 +70,8 @@ export default function Reports() {
   const [selectedCategory, setSelectedCategory] = useState(""); // category pill
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+  // Stable full category list — set once from first unfiltered load, never collapsed by filtering
+  const [fullCategories, setFullCategories] = useState<string[]>(KNOWN_CATEGORIES);
   // derived for API compat
   const filterBy = selectedCategory ? "category" : "";
   const filterValue = selectedCategory;
@@ -117,11 +119,15 @@ export default function Reports() {
     }
   };
 
-  // All categories to show as pills: live data first, fall back to known list
-  const categoryPills = useMemo(() => {
-    if (report?.categories?.length) return report.categories;
-    return KNOWN_CATEGORIES;
-  }, [report]);
+  // Keep fullCategories in sync with unfiltered data (only update when viewing all)
+  useEffect(() => {
+    if (!selectedCategory && report?.categories?.length) {
+      setFullCategories(report.categories);
+    }
+  }, [report, selectedCategory]);
+
+  // Pills always show the full unfiltered category list so user can switch freely
+  const categoryPills = fullCategories;
 
   // Chart data derived from report
   const drillDown = !!selectedCategory; // true = show payment_category breakdown
@@ -149,7 +155,7 @@ export default function Reports() {
       groups[key].push(r);
     }
     // Sort groups by total desc (matching by_payment_category order)
-    const order = report.payment_categories;
+    const order = report.payment_categories ?? [];
     return Object.entries(groups).sort(
       ([a], [b]) => order.indexOf(a) - order.indexOf(b)
     );
@@ -285,7 +291,7 @@ export default function Reports() {
               <span className="text-slate-400">Viewing</span>
               <span
                 className="px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
-                style={{ background: catColor(categoryPills.indexOf(selectedCategory)) }}
+                style={{ background: catColor(Math.max(0, categoryPills.indexOf(selectedCategory))) }}
               >
                 {selectedCategory}
               </span>
@@ -327,13 +333,13 @@ export default function Reports() {
               </h2>
               <ResponsiveContainer width="100%" height={240}>
                 {drillDown ? (
-                  <BarChart data={report.stacked_by_month_payment} margin={{ left: 0, right: 8 }}>
+                  <BarChart data={report.stacked_by_month_payment ?? []} margin={{ left: 0, right: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip content={<MoneyTooltip />} />
                     <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
-                    {report.payment_categories.map((pcat, i) => (
+                    {(report.payment_categories ?? []).map((pcat, i) => (
                       <Bar key={pcat} dataKey={pcat} stackId="a" fill={catColor(i)} />
                     ))}
                   </BarChart>
@@ -381,7 +387,7 @@ export default function Reports() {
               {drillDown ? "Amount by Payment Type" : "Amount by Category"}
             </h2>
             {(() => {
-              const barData = drillDown ? report.by_payment_category : report.by_category;
+              const barData = drillDown ? (report.by_payment_category ?? []) : report.by_category;
               return (
                 <ResponsiveContainer width="100%" height={Math.max(120, barData.length * 48)}>
                   <BarChart data={barData} layout="vertical" margin={{ left: 80, right: 32 }}>
