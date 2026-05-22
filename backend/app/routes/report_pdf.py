@@ -5,6 +5,7 @@ GET /api/reports/unreimbursed/pdf
   Accepts the same filter params as /api/reports/unreimbursed.
   Calls the same aggregation logic and renders the result as a PDF with:
     - Cover page: summary stats + filter info
+    - Charts: pie (by category/payment type) + stacked bar (monthly breakdown)
     - By-category table with amounts and percentages
     - Monthly breakdown table
     - Full receipt list
@@ -13,7 +14,14 @@ from __future__ import annotations
 
 import io
 from datetime import date as _Date, datetime, timezone
-from typing import Optional
+from typing import List, Optional
+
+# Use non-interactive Agg backend — no display server needed in Cloud Run
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import numpy as np
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -23,6 +31,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     HRFlowable,
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -52,8 +61,103 @@ def _cat_color(idx: int) -> colors.HexColor:
     return _hex_to_rl(_PALETTE_HEX[idx % len(_PALETTE_HEX)])
 
 
+def _cat_color_mpl(idx: int) -> str:
+    return _PALETTE_HEX[idx % len(_PALETTE_HEX)]
+
+
 def _fmt_currency(v: float) -> str:
     return f"${v:,.2f}"
+
+
+# ── Chart helpers (matplotlib → PNG → reportlab Image) ────────────────────────
+
+def _currency_ticker(v: float, _=None) -> str:
+    return f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"
+
+
+def _pie_image(items, w_in: float = 3.2, h_in: float = 2.6) -> Optional[Image]:
+    """Pie chart from a list of CategoryStat-like objects."""
+    if not items:
+        return None
+    labels = [c.category for c in items]
+    values = [c.total for c in items]
+    clrs = [_cat_color_mpl(i) for i in range(len(items))]
+
+    fig, ax = plt.subplots(figsize=(w_in, h_in), dpi=130)
+    wedges, _, autotexts = ax.pie(
+        values,
+        colors=clrs,
+        autopct=lambda pct: f"{pct:.1f}%" if pct > 3 else "",
+        startangle=90,
+        wedgeprops={"edgecolor": "white", "linewidth": 1.2},
+        pctdistance=0.75,
+    )
+    for at in autotexts:
+        at.set_fontsize(6.5)
+        at.set_color("white")
+        at.set_fontweight("bold")
+
+    ax.legend(
+        wedges, labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.18),
+        ncol=min(3, len(labels)),
+        fontsize=6.5,
+        frameon=False,
+        handlelength=0.8,
+        handleheight=0.8,
+    )
+    fig.patch.set_facecolor("white")
+    plt.tight_layout(pad=0.5)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", dpi=130, facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return Image(buf, width=w_in * inch, height=h_in * inch)
+
+
+def _stacked_bar_image(
+    stacked_rows: list,
+    categories: List[str],
+    w_in: float = 3.5,
+    h_in: float = 2.6,
+) -> Optional[Image]:
+    """Stacked vertical bar chart from stacked_by_month data."""
+    if not stacked_rows or not categories:
+        return None
+    months = [row["month"] for row in stacked_rows]
+    x = np.arange(len(months))
+
+    fig, ax = plt.subplots(figsize=(w_in, h_in), dpi=130)
+    bottoms = np.zeros(len(months))
+    for i, cat in enumerate(categories):
+        vals = np.array([float(row.get(cat, 0)) for row in stacked_rows])
+        ax.bar(x, vals, bottom=bottoms, color=_cat_color_mpl(i), label=cat, width=0.55)
+        bottoms += vals
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(months, rotation=30, ha="right", fontsize=7)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_currency_ticker))
+    ax.tick_params(axis="y", labelsize=7)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_facecolor("#fafafa")
+    ax.grid(axis="y", linestyle="--", alpha=0.4, color="#e2e8f0")
+    ax.legend(
+        loc="upper left",
+        fontsize=6.5,
+        frameon=False,
+        ncol=min(2, len(categories)),
+    )
+    fig.patch.set_facecolor("white")
+    plt.tight_layout(pad=0.5)
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", bbox_inches="tight", dpi=130, facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+    return Image(buf, width=w_in * inch, height=h_in * inch)
 
 
 # ── PDF endpoint ──────────────────────────────────────────────────────────────
@@ -206,6 +310,41 @@ def _build_pdf(
         ("ROUNDEDCORNERS", (0, 0), (-1, -1), [4, 4, 4, 4]),
     ]))
     story.append(stat_table)
+
+    # ── Charts ────────────────────────────────────────────────────────────────────
+    # In drill-down mode (filter_by=category), show payment_category charts;
+    # otherwise show the standard category-level charts.
+    is_drill_down = filter_by == "category"
+    pie_items = report.by_payment_category if is_drill_down else report.by_category  # type: ignore
+    stacked_rows = report.stacked_by_month_payment if is_drill_down else report.stacked_by_month  # type: ignore
+    chart_cats = report.payment_categories if is_drill_down else report.categories  # type: ignore
+
+    pie_title = "By Payment Type" if is_drill_down else "By Category"
+    bar_title = "Monthly Breakdown by Payment Type" if is_drill_down else "Monthly Breakdown by Category"
+
+    pie_img = _pie_image(pie_items, w_in=3.2, h_in=2.6)
+    bar_img = _stacked_bar_image(stacked_rows, chart_cats, w_in=3.5, h_in=2.6)
+
+    if pie_img or bar_img:
+        story.append(Spacer(1, 0.15 * inch))
+        chart_cells = [
+            [
+                [Paragraph(pie_title, section_style), pie_img or Spacer(1, 0.1)],
+                [Paragraph(bar_title, section_style), bar_img or Spacer(1, 0.1)],
+            ]
+        ]
+        chart_table = Table(
+            chart_cells,
+            colWidths=[col_width * 0.46, col_width * 0.54],
+        )
+        chart_table.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(chart_table)
 
     # ── By category ──────────────────────────────────────────────────────────
     if report.by_category:  # type: ignore
