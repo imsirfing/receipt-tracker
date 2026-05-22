@@ -325,6 +325,103 @@ export const revokeAccess = async (id: string): Promise<void> => {
   await api.delete(`/api/admin/access/${id}`);
 };
 
+// ---------------------------------------------------------------------------
+// Unreimbursed report
+// ---------------------------------------------------------------------------
+
+export interface ReportSummary {
+  total: number;
+  count: number;
+  avg: number;
+  oldest_date: string | null;
+  newest_date: string | null;
+}
+
+export interface CategoryStat {
+  category: string;
+  total: number;
+  count: number;
+  pct: number;
+}
+
+export interface MonthStat {
+  month: string;
+  label: string;
+  total: number;
+  count: number;
+}
+
+export interface ReportReceiptLine {
+  id: string;
+  payee: string;
+  amount: number;
+  date: string;
+  category_variable: string;
+  payment_category: string | null;
+  inferred_purpose: string | null;
+  notes: string | null;
+  reimbursement_owner: string | null;
+  reimbursement_note: string | null;
+  created_at: string;
+}
+
+export interface UnreimbursedReport {
+  filter_by: string | null;
+  filter_value: string | null;
+  date_start: string | null;
+  date_end: string | null;
+  summary: ReportSummary;
+  by_category: CategoryStat[];
+  by_month: MonthStat[];
+  stacked_by_month: Array<Record<string, string | number>>;
+  categories: string[];
+  receipts: ReportReceiptLine[];
+}
+
+export async function getUnreimbursedReport(params: {
+  filter_by?: string;
+  filter_value?: string;
+  date_start?: string;
+  date_end?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<UnreimbursedReport> {
+  const p = new URLSearchParams();
+  if (params.filter_by) p.set("filter_by", params.filter_by);
+  if (params.filter_value) p.set("filter_value", params.filter_value);
+  if (params.date_start) p.set("date_start", params.date_start);
+  if (params.date_end) p.set("date_end", params.date_end);
+  if (params.limit !== undefined) p.set("limit", String(params.limit));
+  if (params.offset !== undefined) p.set("offset", String(params.offset));
+  const res = await api.get<UnreimbursedReport>(`/api/reports/unreimbursed?${p.toString()}`);
+  return res.data;
+}
+
+export async function downloadUnreimbursedReportPdf(params: {
+  filter_by?: string;
+  filter_value?: string;
+  date_start?: string;
+  date_end?: string;
+}): Promise<void> {
+  const p = new URLSearchParams();
+  if (params.filter_by) p.set("filter_by", params.filter_by);
+  if (params.filter_value) p.set("filter_value", params.filter_value);
+  if (params.date_start) p.set("date_start", params.date_start);
+  if (params.date_end) p.set("date_end", params.date_end);
+  const res = await api.get(`/api/reports/unreimbursed/pdf?${p.toString()}`, {
+    responseType: "blob",
+  });
+  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url;
+  const ts = new Date().toISOString().split("T")[0];
+  a.download = `unreimbursed-report-${ts}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+}
+
 export async function downloadEvidencePackage(receiptId: string): Promise<void> {
   const response = await api.get(`/api/receipts/${receiptId}/evidence-package`, {
     responseType: 'blob',

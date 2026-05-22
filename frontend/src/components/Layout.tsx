@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, LogOut, MessageSquare, Receipt, RefreshCw, ShieldCheck } from "lucide-react";
+import { BarChart3, ClipboardList, FileText, LogOut, MessageSquare, Receipt, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
 import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
@@ -9,6 +9,7 @@ const baseNav = [
   { to: "/", label: "Dashboard", icon: BarChart3, writeOnly: false },
   { to: "/review", label: "Review", icon: ClipboardList, writeOnly: true },
   { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false },
+  { to: "/reports", label: "Reports", icon: FileText, writeOnly: false },
   { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false },
 ];
 
