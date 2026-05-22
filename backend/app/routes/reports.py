@@ -79,6 +79,12 @@ class UnreimbursedReportOut(BaseModel):
     by_month: List[MonthStat]
     stacked_by_month: List[Dict[str, Any]]  # [{month: "Jan 2026", Travel: 150, ...}]
     categories: List[str]                   # ordered list of all category names
+
+    # Payment-category drill-down (populated for all requests)
+    by_payment_category: List[CategoryStat]
+    stacked_by_month_payment: List[Dict[str, Any]]
+    payment_categories: List[str]
+
     receipts: List[ReceiptLine]
 
 
