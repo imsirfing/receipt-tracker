@@ -48,6 +48,23 @@ jobs:
         DATABASE_URL: "${{ secrets.DATABASE_URL }}"
         EOF
 
+    - name: Run Alembic migrations
+      run: |
+        gcloud run jobs update alembic-migrate \
+          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} \
+          --region $REGION \
+          --set-cloudsql-instances $CLOUDSQL_INSTANCE \
+          --env-vars-file /tmp/env-vars.yaml || \
+        gcloud run jobs create alembic-migrate \
+          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} \
+          --region $REGION \
+          --command alembic \
+          --args upgrade,head \
+          --set-cloudsql-instances $CLOUDSQL_INSTANCE \
+          --env-vars-file /tmp/env-vars.yaml \
+          --max-retries 1
+        gcloud run jobs execute alembic-migrate --region $REGION --wait
+
     - name: Deploy Backend to Cloud Run
       run: |
         gcloud run deploy $SERVICE_NAME \
