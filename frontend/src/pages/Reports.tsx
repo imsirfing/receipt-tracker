@@ -266,7 +266,9 @@ export default function Reports() {
       )}
 
       {/* ── Data ── */}
-      {!loading && !error && report && report.summary.count > 0 && (
+      {/* Keep this section mounted during loading transitions so ResponsiveContainer
+          never remounts mid-flight (remounting causes 0-size chart rendering). */}
+      {!error && report && report.summary.count > 0 && (
         <>
           {/* Stat cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -300,7 +302,7 @@ export default function Reports() {
           )}
 
           {/* Charts row: pie + stacked bar */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 transition-opacity duration-150 ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
             {/* Pie */}
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <h2 className="text-sm font-semibold text-slate-700 mb-4">
@@ -360,7 +362,7 @@ export default function Reports() {
           </div>
 
           {/* Line chart — monthly trend total */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <div className={`bg-white border border-slate-200 rounded-xl p-5 transition-opacity duration-150 ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
             <h2 className="text-sm font-semibold text-slate-700 mb-4">Monthly Spend Trend</h2>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={report.by_month} margin={{ left: 0, right: 16 }}>
@@ -382,7 +384,7 @@ export default function Reports() {
           </div>
 
           {/* Horizontal bar — breakdown */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <div className={`bg-white border border-slate-200 rounded-xl p-5 transition-opacity duration-150 ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
             <h2 className="text-sm font-semibold text-slate-700 mb-4">
               {drillDown ? "Amount by Payment Type" : "Amount by Category"}
             </h2>
