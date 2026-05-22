@@ -41,6 +41,10 @@ const FILTER_DIMS = [
   { value: "payment_category", label: "By payment type" },
 ];
 
+const KNOWN_CATEGORIES = [
+  "personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized",
+];
+
 // ── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
@@ -180,7 +184,22 @@ export default function Reports() {
           </div>
 
           {/* Filter value (shown when a dimension is selected) */}
-          {filterBy && (
+          {filterBy === "category" && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-slate-500">Category</label>
+              <select
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              >
+                <option value="">All categories</option>
+                {(report?.categories?.length ? report.categories : KNOWN_CATEGORIES).map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {filterBy && filterBy !== "category" && (
             <div className="flex flex-col gap-1">
               <label className="text-xs text-slate-500">Value</label>
               <input
