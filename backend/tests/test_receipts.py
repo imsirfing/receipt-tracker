@@ -157,13 +157,13 @@ def _reset_session_execute(session, *results):
 
 @pytest.mark.unit
 def test_receipt_out_includes_reimbursement_status():
-    from app.routes.receipts import ReceiptOut
+    from app.schemas.receipts import ReceiptOut
     assert "reimbursement_status" in ReceiptOut.model_fields
 
 
 @pytest.mark.unit
 def test_receipt_out_reimbursement_status_default():
-    from app.routes.receipts import ReceiptOut
+    from app.schemas.receipts import ReceiptOut
     field = ReceiptOut.model_fields["reimbursement_status"]
     # Pydantic stores default in field.default
     assert field.default == "none"
@@ -171,13 +171,13 @@ def test_receipt_out_reimbursement_status_default():
 
 @pytest.mark.unit
 def test_receipt_update_has_reimbursement_status():
-    from app.routes.receipts import ReceiptUpdate
+    from app.schemas.receipts import ReceiptUpdate
     assert "reimbursement_status" in ReceiptUpdate.model_fields
 
 
 @pytest.mark.unit
 def test_bulk_set_reimbursement_status_request_schema():
-    from app.routes.receipts import BulkSetReimbursementStatusRequest
+    from app.schemas.receipts import BulkSetReimbursementStatusRequest
     req = BulkSetReimbursementStatusRequest(ids=[], status="pending")
     assert req.status == "pending"
     assert req.ids == []

@@ -26,7 +26,7 @@ jobs:
         cache-dependency-path: backend/requirements.txt
 
     - name: Install test dependencies
-      run: pip install pydantic fastapi anyio pytest pytest-asyncio httpx sqlalchemy
+      run: pip install pydantic fastapi anyio pytest pytest-asyncio httpx sqlalchemy reportlab
 
     - name: Run unit tests
       working-directory: backend
