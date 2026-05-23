@@ -47,7 +47,7 @@ if "firebase_admin" not in sys.modules:
 def make_mock_receipt(**overrides) -> MagicMock:
     """Return a MagicMock that looks like a Receipt ORM row."""
     defaults = dict(
-        id="test-receipt-id",
+        id="00000000-0000-0000-0000-000000000001",
         payee="Acme Corp",
         amount=Decimal("123.45"),
         date=date(2026, 3, 15),
@@ -73,7 +73,7 @@ def sample_receipts():
     """Two synthetic unreimbursed receipts across different categories/months."""
     return [
         make_mock_receipt(
-            id="r1",
+            id="00000000-0000-0000-0000-000000000002",
             payee="Vendor A",
             amount=Decimal("150.00"),
             date=date(2026, 1, 10),
@@ -81,7 +81,7 @@ def sample_receipts():
             payment_category="Amex",
         ),
         make_mock_receipt(
-            id="r2",
+            id="00000000-0000-0000-0000-000000000003",
             payee="Vendor B",
             amount=Decimal("75.50"),
             date=date(2026, 2, 5),

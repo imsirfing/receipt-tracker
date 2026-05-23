@@ -133,7 +133,13 @@ def app_with_overrides(mock_db_session):
     from app.main import app
 
     async def _fake_auth():
-        return {"uid": "test-uid-123", "email": "test@example.com", "role": "owner"}
+        return {
+            "uid": "test-uid-123",
+            "email": "test@example.com",
+            "role": "owner",
+            "is_owner": True,
+            "access_categories": ["all"],
+        }
 
     async def _fake_session():
         yield mock_db_session
