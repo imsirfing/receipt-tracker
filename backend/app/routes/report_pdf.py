@@ -166,6 +166,7 @@ def _stacked_bar_image(
 async def get_unreimbursed_report_pdf(
     filter_by: Optional[str] = Query(None),
     filter_value: Optional[str] = Query(None),
+    reimbursement_status: Optional[str] = Query(None),
     date_start: Optional[str] = Query(None),
     date_end: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_session),
@@ -190,6 +191,7 @@ async def get_unreimbursed_report_pdf(
     report = await get_unreimbursed_report(
         filter_by=filter_by,
         filter_value=filter_value,
+        reimbursement_status=reimbursement_status,
         date_start=date_start_parsed,
         date_end=date_end_parsed,
         limit=1000,
@@ -198,7 +200,7 @@ async def get_unreimbursed_report_pdf(
         current_user=current_user,
     )
 
-    pdf_bytes = _build_pdf(report, filter_by, filter_value, date_start, date_end)
+    pdf_bytes = _build_pdf(report, filter_by, filter_value, reimbursement_status, date_start, date_end)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d")
     return Response(
@@ -216,6 +218,7 @@ def _build_pdf(
     report: object,  # UnreimbursedReportOut
     filter_by: Optional[str],
     filter_value: Optional[str],
+    reimbursement_status: Optional[str],
     date_start: Optional[str],
     date_end: Optional[str],
 ) -> bytes:
@@ -264,9 +267,16 @@ def _build_pdf(
     story.append(Paragraph(f"Generated: {generated_at}", subtitle_style))
 
     # Filter context
+    _STATUS_LABELS = {
+        "none": "Not submitted",
+        "pending": "Pending reimbursement",
+        "reimbursed": "Reimbursed",
+    }
     filter_parts = []
     if filter_by and filter_value:
         filter_parts.append(f"Filter: {filter_by} = {filter_value}")
+    if reimbursement_status:
+        filter_parts.append(f"Status: {_STATUS_LABELS.get(reimbursement_status, reimbursement_status)}")
     if date_start:
         filter_parts.append(f"From: {date_start}")
     if date_end:

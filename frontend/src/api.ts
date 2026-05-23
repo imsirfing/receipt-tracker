@@ -392,6 +392,7 @@ export interface UnreimbursedReport {
 export async function getUnreimbursedReport(params: {
   filter_by?: string;
   filter_value?: string;
+  reimbursement_status?: string;
   date_start?: string;
   date_end?: string;
   limit?: number;
@@ -400,6 +401,7 @@ export async function getUnreimbursedReport(params: {
   const p = new URLSearchParams();
   if (params.filter_by) p.set("filter_by", params.filter_by);
   if (params.filter_value) p.set("filter_value", params.filter_value);
+  if (params.reimbursement_status) p.set("reimbursement_status", params.reimbursement_status);
   if (params.date_start) p.set("date_start", params.date_start);
   if (params.date_end) p.set("date_end", params.date_end);
   if (params.limit !== undefined) p.set("limit", String(params.limit));
@@ -411,12 +413,14 @@ export async function getUnreimbursedReport(params: {
 export async function downloadUnreimbursedReportPdf(params: {
   filter_by?: string;
   filter_value?: string;
+  reimbursement_status?: string;
   date_start?: string;
   date_end?: string;
 }): Promise<void> {
   const p = new URLSearchParams();
   if (params.filter_by) p.set("filter_by", params.filter_by);
   if (params.filter_value) p.set("filter_value", params.filter_value);
+  if (params.reimbursement_status) p.set("reimbursement_status", params.reimbursement_status);
   if (params.date_start) p.set("date_start", params.date_start);
   if (params.date_end) p.set("date_end", params.date_end);
   const res = await api.get(`/api/reports/unreimbursed/pdf?${p.toString()}`, {

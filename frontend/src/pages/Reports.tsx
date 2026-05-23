@@ -68,6 +68,7 @@ function MoneyTooltip({ active, payload, label }: any) {
 export default function Reports() {
   // Filter state
   const [selectedCategory, setSelectedCategory] = useState(""); // category pill
+  const [reimbursementStatus, setReimbursementStatus] = useState(""); // "" | none | pending
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
   // Stable full category list — set once from first unfiltered load, never collapsed by filtering
@@ -89,6 +90,7 @@ export default function Reports() {
       const data = await getUnreimbursedReport({
         filter_by: filterBy || undefined,
         filter_value: filterValue || undefined,
+        reimbursement_status: reimbursementStatus || undefined,
         date_start: dateStart || undefined,
         date_end: dateEnd || undefined,
       });
@@ -98,7 +100,7 @@ export default function Reports() {
     } finally {
       setLoading(false);
     }
-  }, [filterBy, filterValue, dateStart, dateEnd]);
+  }, [filterBy, filterValue, reimbursementStatus, dateStart, dateEnd]);
 
   // Load on mount and whenever filters change
   useEffect(() => { fetch(); }, [fetch]);
@@ -109,6 +111,7 @@ export default function Reports() {
       await downloadUnreimbursedReportPdf({
         filter_by: filterBy || undefined,
         filter_value: filterValue || undefined,
+        reimbursement_status: reimbursementStatus || undefined,
         date_start: dateStart || undefined,
         date_end: dateEnd || undefined,
       });
@@ -218,8 +221,20 @@ export default function Reports() {
           ))}
         </div>
 
-        {/* Date range */}
+        {/* Date range + reimbursement status */}
         <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-slate-500">Status</label>
+            <select
+              value={reimbursementStatus}
+              onChange={(e) => setReimbursementStatus(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="">All outstanding</option>
+              <option value="none">Not submitted</option>
+              <option value="pending">Pending reimbursement</option>
+            </select>
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs text-slate-500">From</label>
             <input
@@ -238,9 +253,9 @@ export default function Reports() {
               className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
           </div>
-          {(selectedCategory || dateStart || dateEnd) && (
+          {(selectedCategory || reimbursementStatus || dateStart || dateEnd) && (
             <button
-              onClick={() => { setSelectedCategory(""); setDateStart(""); setDateEnd(""); }}
+              onClick={() => { setSelectedCategory(""); setReimbursementStatus(""); setDateStart(""); setDateEnd(""); }}
               className="px-3 py-2 text-sm text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg"
             >
               Clear

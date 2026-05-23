@@ -59,6 +59,10 @@ async def get_unreimbursed_report(
         None,
         description="Value for the selected filter_by dimension",
     ),
+    reimbursement_status: Optional[str] = Query(
+        None,
+        description="Filter by reimbursement status: none, pending, or reimbursed. Omit for all unreimbursed (default).",
+    ),
     # Date range always applies (independent of filter_by)
     date_start: Optional[_Date] = Query(None, description="Inclusive start date (YYYY-MM-DD)"),
     date_end: Optional[_Date] = Query(None, description="Inclusive end date (YYYY-MM-DD)"),
@@ -69,11 +73,18 @@ async def get_unreimbursed_report(
     current_user: dict = Depends(get_current_user),
 ) -> UnreimbursedReportOut:
 
-    # --- Base filter: unreimbursed + not deleted ---
+    # --- Base filter: not deleted ---
     conditions = [
-        Receipt.is_reimbursed.is_(False),
         Receipt.deleted_at.is_(None),
     ]
+
+    # Reimbursement filter:
+    #  - None (omitted): all unreimbursed (backward compat)
+    #  - explicit status: filter by reimbursement_status column
+    if reimbursement_status in ("none", "pending", "reimbursed"):
+        conditions.append(Receipt.reimbursement_status == reimbursement_status)
+    else:
+        conditions.append(Receipt.is_reimbursed.is_(False))
 
     # Category-scoped access for non-owner users
     if not current_user["is_owner"] and "all" not in current_user["access_categories"]:
@@ -108,6 +119,7 @@ async def get_unreimbursed_report(
             filter_value=filter_value,
             date_start=date_start,
             date_end=date_end,
+            reimbursement_status=reimbursement_status,
             summary=ReportSummary(total=0, count=0, avg=0, oldest_date=None, newest_date=None),
             by_category=[],
             by_month=[],
@@ -238,6 +250,7 @@ async def get_unreimbursed_report(
         filter_value=filter_value,
         date_start=date_start,
         date_end=date_end,
+        reimbursement_status=reimbursement_status,
         summary=ReportSummary(
             total=round(grand_total, 2),
             count=count,

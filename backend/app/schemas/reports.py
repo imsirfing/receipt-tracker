@@ -62,6 +62,7 @@ class UnreimbursedReportOut(BaseModel):
     filter_value: Optional[str]
     date_start: Optional[_Date]
     date_end: Optional[_Date]
+    reimbursement_status: Optional[str] = None
 
     summary: ReportSummary
     by_category: List[CategoryStat]
