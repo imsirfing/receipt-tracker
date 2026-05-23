@@ -59,6 +59,7 @@ def make_mock_receipt(**overrides) -> MagicMock:
         is_reimbursed=False,
         reimbursed_by=None,
         reimbursement_note=None,
+        reimbursement_status="none",
     )
     defaults.update(overrides)
     r = MagicMock()

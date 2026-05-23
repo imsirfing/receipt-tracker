@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 from datetime import date, datetime, timezone
 from enum import Enum as PyEnum
