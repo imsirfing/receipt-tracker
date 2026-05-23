@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { auth } from "../firebase";
 import {
   attachImage,
-  bulkMarkReimbursed,
+  bulkSetReimbursementStatus,
   createReceipt,
   deleteReceipt,
   listReceipts,
@@ -42,7 +42,7 @@ export default function ReceiptsPage() {
   const [uploadResult, setUploadResult] = useState<ParseImageResult | null>(null);
 
   const [filterCategory, setFilterCategory] = useState<string>("");
-  const [filterReimbursed, setFilterReimbursed] = useState<string>("");
+  const [filterReimbursementStatus, setFilterReimbursementStatus] = useState<string>("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -67,8 +67,7 @@ export default function ReceiptsPage() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const reimbursedParam = filterReimbursed === "true" ? true : filterReimbursed === "false" ? false : undefined;
-      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE, filterCategory || undefined, reimbursedParam, search || undefined);
+      const data = await listReceipts(PAGE_SIZE, page * PAGE_SIZE, filterCategory || undefined, undefined, search || undefined, filterReimbursementStatus || undefined);
       setReceipts(data.items);
       setTotal(data.total);
     } catch (e) {
@@ -81,7 +80,7 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     refresh();
-  }, [page, filterCategory, filterReimbursed, search]);
+  }, [page, filterCategory, filterReimbursementStatus, search]);
 
   const filtered = useMemo(() => {
     let rows = receipts.slice();
@@ -109,23 +108,24 @@ export default function ReceiptsPage() {
     await refresh();
   };
 
-  const handleBulkReimburse = async () => {
+  const handleBulkSetStatus = async (newStatus: 'none' | 'pending' | 'reimbursed') => {
     if (selectedIds.size === 0) return;
     setBulkLoading(true);
     try {
-      const result = await bulkMarkReimbursed(Array.from(selectedIds));
-      toast.success(`Marked ${result.updated} receipt${result.updated !== 1 ? "s" : ""} as reimbursed.`);
+      const result = await bulkSetReimbursementStatus(Array.from(selectedIds), newStatus);
+      const label = newStatus === 'reimbursed' ? 'reimbursed' : newStatus === 'pending' ? 'pending' : 'not reimbursed';
+      toast.success(`Marked ${result.updated} receipt${result.updated !== 1 ? "s" : ""} as ${label}.`);
       setSelectedIds(new Set());
       await refresh();
     } catch (e) {
-      toast.error("Bulk reimburse failed.");
+      toast.error("Bulk update failed.");
     } finally {
       setBulkLoading(false);
     }
   };
 
   // Unreimbursed receipts visible in the current filtered view
-  const selectableIds = filtered.filter(r => !r.is_reimbursed).map(r => r.id);
+  const selectableIds = filtered.filter(r => r.reimbursement_status !== 'reimbursed').map(r => r.id);
   const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
   const someSelected = selectableIds.some(id => selectedIds.has(id));
 
@@ -236,11 +236,18 @@ export default function ReceiptsPage() {
         <div className="flex items-center gap-3 mb-4 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
           <span className="text-sm text-indigo-700 font-medium">{selectedIds.size} selected</span>
           <button
-            onClick={handleBulkReimburse}
+            onClick={() => handleBulkSetStatus('pending')}
+            disabled={bulkLoading}
+            className="inline-flex items-center gap-1.5 text-sm bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg disabled:opacity-50 font-medium"
+          >
+            <Check size={14} /> {bulkLoading ? "Marking…" : "Mark Pending"}
+          </button>
+          <button
+            onClick={() => handleBulkSetStatus('reimbursed')}
             disabled={bulkLoading}
             className="inline-flex items-center gap-1.5 text-sm bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg disabled:opacity-50 font-medium"
           >
-            <Check size={14} /> {bulkLoading ? "Marking…" : "Mark reimbursed"}
+            <Check size={14} /> {bulkLoading ? "Marking…" : "Mark Reimbursed"}
           </button>
           <button
             onClick={() => setSelectedIds(new Set())}
@@ -274,12 +281,13 @@ export default function ReceiptsPage() {
 
         <select
           className="border rounded px-2 py-1 text-sm"
-          value={filterReimbursed}
-          onChange={(e) => { setFilterReimbursed(e.target.value); setPage(0); }}
+          value={filterReimbursementStatus}
+          onChange={(e) => { setFilterReimbursementStatus(e.target.value); setPage(0); }}
         >
           <option value="">Any status</option>
-          <option value="false">Unreimbursed</option>
-          <option value="true">Reimbursed</option>
+          <option value="none">Not reimbursed</option>
+          <option value="pending">Pending reimbursement</option>
+          <option value="reimbursed">Reimbursed</option>
         </select>
       </div>
 
@@ -337,7 +345,7 @@ export default function ReceiptsPage() {
                   }`}
                 >
                   <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                    {canWrite && !r.is_reimbursed && (
+                    {canWrite && r.reimbursement_status !== 'reimbursed' && (
                       <input
                         type="checkbox"
                         checked={selectedIds.has(r.id)}
@@ -361,10 +369,12 @@ export default function ReceiptsPage() {
                   <td className="hidden md:table-cell px-3 py-2 text-slate-500 text-xs max-w-xs truncate" title={r.payment_detail ?? ""}>{r.payment_detail ?? "—"}</td>
                   <td className="hidden md:table-cell px-3 py-2">{r.recurring_type}</td>
                   <td className="px-3 py-2">
-                    {r.is_reimbursed ? (
-                      <span className="text-green-700">yes</span>
+                    {r.reimbursement_status === 'reimbursed' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">reimbursed</span>
+                    ) : r.reimbursement_status === 'pending' ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">pending</span>
                     ) : (
-                      <span className="text-slate-500">no</span>
+                      <span className="text-slate-400 text-xs">none</span>
                     )}
                   </td>
                   <td className="px-3 py-2 flex gap-2 justify-end">

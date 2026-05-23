@@ -12,6 +12,11 @@ class RecurringType(str, PyEnum):
     ONE_OFF = "one_off"
     ONGOING = "ongoing"
 
+class ReimbursementStatus(str, PyEnum):
+    NONE = "none"
+    PENDING = "pending"
+    REIMBURSED = "reimbursed"
+
 class Receipt(Base):
     __tablename__ = "receipts"
 
@@ -35,6 +40,7 @@ class Receipt(Base):
     reimbursed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reimbursed_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     reimbursement_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reimbursement_status: Mapped[str] = mapped_column(String(20), default=ReimbursementStatus.NONE.value, server_default="none", nullable=False)
     raw_email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual", server_default="manual")
     ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -55,6 +61,7 @@ class Receipt(Base):
         Index("idx_receipts_raw_email_id", "raw_email_id"),
         Index("idx_receipts_deleted_at", "deleted_at"),
         Index("idx_receipts_reimbursed_date_category", "is_reimbursed", "date", "category_variable"),
+        Index("idx_receipts_reimbursement_status", "reimbursement_status"),
     )
 
     def to_audit_dict(self) -> Dict[str, Any]:
@@ -73,6 +80,7 @@ class Receipt(Base):
             "is_tax_deductible": self.is_tax_deductible,
             "reimbursement_owner": self.reimbursement_owner,
             "is_reimbursed": self.is_reimbursed,
+            "reimbursement_status": self.reimbursement_status,
             "reimbursed_at": self.reimbursed_at.isoformat() if self.reimbursed_at else None,
             "raw_email_id": self.raw_email_id,
             "source": self.source,

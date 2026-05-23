@@ -51,6 +51,7 @@ class ReceiptOut(BaseModel):
     category_variable: str
     recurring_type: RecurringType
     is_reimbursed: bool
+    reimbursement_status: str = "none"
     reimbursed_at: Optional[datetime]
     notes: Optional[str] = None
     is_tax_deductible: bool = False
@@ -90,6 +91,7 @@ class ReceiptUpdate(BaseModel):
     date: Optional[_Date] = None
     category_variable: Optional[str] = None
     is_reimbursed: Optional[bool] = None
+    reimbursement_status: Optional[str] = None
     reimbursed_at: Optional[datetime] = None
     notes: Optional[str] = None
     is_tax_deductible: Optional[bool] = None
@@ -141,6 +143,7 @@ async def create_receipt(
 async def list_receipts(
     category: Optional[str] = Query(None),
     is_reimbursed: Optional[bool] = Query(None),
+    reimbursement_status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -159,6 +162,8 @@ async def list_receipts(
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(is_reimbursed))
+    if reimbursement_status is not None:
+        stmt = stmt.where(Receipt.reimbursement_status == reimbursement_status)
     if search is not None and search.strip():
         term = f"%{search.strip()}%"
         stmt = stmt.where(
@@ -281,6 +286,40 @@ async def parse_receipt_image(
     }
 
 
+class BulkSetReimbursementStatusRequest(BaseModel):
+    ids: List[uuid.UUID]
+    status: str
+
+
+@router.post("/bulk-set-reimbursement-status")
+async def bulk_set_reimbursement_status(
+    body: BulkSetReimbursementStatusRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Write access required")
+    valid = {"none", "pending", "reimbursed"}
+    if body.status not in valid:
+        raise HTTPException(status_code=400, detail=f"status must be one of {valid}")
+    if not body.ids:
+        return {"updated": 0}
+    now = datetime.now(timezone.utc)
+    result = await session.execute(select(Receipt).where(Receipt.id.in_(body.ids)))
+    receipts = result.scalars().all()
+    for receipt in receipts:
+        receipt.reimbursement_status = body.status
+        if body.status == "reimbursed":
+            receipt.is_reimbursed = True
+            if not receipt.reimbursed_at:
+                receipt.reimbursed_at = now
+        else:
+            receipt.is_reimbursed = False
+            receipt.reimbursed_at = None
+    await session.commit()
+    return {"updated": len(receipts)}
+
+
 @router.get("/{receipt_id}", response_model=ReceiptOut)
 async def get_receipt(
     receipt_id: uuid.UUID,
@@ -354,6 +393,7 @@ async def reimburse_receipt(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="receipt not found")
 
     receipt.is_reimbursed = True
+    receipt.reimbursement_status = "reimbursed"
     receipt.reimbursed_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(receipt)
@@ -381,6 +421,7 @@ async def bulk_reimburse_receipts(
     for receipt in receipts:
         if not receipt.is_reimbursed:
             receipt.is_reimbursed = True
+            receipt.reimbursement_status = "reimbursed"
             receipt.reimbursed_at = now
             count += 1
     await session.commit()

@@ -79,6 +79,7 @@ export interface Receipt {
   payment_detail: string | null;
   recurring_type: "ongoing" | "one_off";
   is_reimbursed: boolean;
+  reimbursement_status: 'none' | 'pending' | 'reimbursed';
   reimbursed_at: string | null;
   raw_email_id: string;
   source: string;
@@ -117,10 +118,12 @@ export async function listReceipts(
   category?: string,
   isReimbursed?: boolean,
   search?: string,
+  reimbursementStatus?: string,
 ): Promise<ReceiptListResponse> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (category) params.set("category", category);
   if (isReimbursed !== undefined) params.set("is_reimbursed", String(isReimbursed));
+  if (reimbursementStatus) params.set("reimbursement_status", reimbursementStatus);
   if (search) params.set("search", search);
   const res = await api.get<ReceiptListResponse>(`/api/receipts?${params.toString()}`);
   return res.data;
@@ -142,6 +145,11 @@ export const markReimbursed = async (id: string) => {
 
 export const bulkMarkReimbursed = async (ids: string[]): Promise<{ updated: number }> => {
   const res = await api.post<{ updated: number }>(`/api/receipts/bulk-reimburse`, { ids });
+  return res.data;
+};
+
+export const bulkSetReimbursementStatus = async (ids: string[], status: 'none' | 'pending' | 'reimbursed'): Promise<{ updated: number }> => {
+  const res = await api.post<{ updated: number }>('/api/receipts/bulk-set-reimbursement-status', { ids, status });
   return res.data;
 };
 
