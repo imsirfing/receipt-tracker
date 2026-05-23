@@ -426,7 +426,7 @@ export default function ReceiptsPage() {
         </div>
       )}
 
-      {editing && <EditModal receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} onDelete={handleDelete} />}
+      {editing && <EditDrawer receipt={editing} onClose={() => setEditing(null)} onSave={handleSave} onDelete={handleDelete} />}
 
       {uploadResult && (
         <UploadReceiptModal
@@ -650,7 +650,7 @@ function UploadReceiptModal({
   );
 }
 
-function EditModal({
+function EditDrawer({
   receipt,
   onClose,
   onSave,
@@ -677,7 +677,32 @@ function EditModal({
   const effectiveCategory =
     categorySelect === "__custom__" ? customCategory.trim() : categorySelect;
 
+  // New fields
+  const [recurringType, setRecurringType] = useState<"one_off" | "ongoing">(
+    receipt.recurring_type
+  );
+  const [paymentCategory, setPaymentCategory] = useState(receipt.payment_category ?? "");
+  const [paymentDetail, setPaymentDetail] = useState(receipt.payment_detail ?? "");
+  const [inferredPurpose, setInferredPurpose] = useState(receipt.inferred_purpose ?? "");
+  const [notes, setNotes] = useState(receipt.notes ?? "");
+  const [reimbursementOwner, setReimbursementOwner] = useState(
+    receipt.reimbursement_owner ?? ""
+  );
+  const [isTaxDeductible, setIsTaxDeductible] = useState(
+    receipt.is_tax_deductible ?? false
+  );
+  const [reimbursementStatus, setReimbursementStatus] = useState<
+    "none" | "pending" | "reimbursed"
+  >(receipt.reimbursement_status);
+
   const [saving, setSaving] = useState(false);
+
+  // Drive the slide-in: mount off-screen, then animate to open on next tick.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setOpen(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const submit = async () => {
     setSaving(true);
@@ -687,6 +712,14 @@ function EditModal({
         amount: Number(amount),
         date,
         category_variable: effectiveCategory || receipt.category_variable,
+        recurring_type: recurringType,
+        payment_category: paymentCategory.trim() || null,
+        payment_detail: paymentDetail.trim() || null,
+        inferred_purpose: inferredPurpose.trim() || null,
+        notes: notes.trim() || null,
+        reimbursement_owner: reimbursementOwner.trim() || null,
+        is_tax_deductible: isTaxDeductible,
+        reimbursement_status: reimbursementStatus,
       });
     } finally {
       setSaving(false);
@@ -694,64 +727,158 @@ function EditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="font-medium">Edit receipt</div>
-          <button onClick={onClose}>
+    <div className="fixed inset-0 z-50">
+      {/* Backdrop */}
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${open ? "opacity-100" : "opacity-0"}`}
+        onClick={onClose}
+      />
+      {/* Drawer */}
+      <div
+        className={`absolute right-0 top-0 bottom-0 w-full max-w-md bg-white shadow-xl flex flex-col transition-transform duration-300 ease-in-out ${open ? "translate-x-0" : "translate-x-full"}`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 py-4 border-b">
+          <div>
+            <div className="font-medium">Edit receipt</div>
+            <div className="text-sm text-slate-500">{receipt.payee}</div>
+          </div>
+          <button onClick={onClose} className="mt-0.5">
             <X size={18} />
           </button>
         </div>
-        <label className="block text-sm mb-2">
-          Payee
-          <input
-            value={payee}
-            onChange={(e) => setPayee(e.target.value)}
-            className="border rounded px-2 py-1 w-full mt-1"
-          />
-        </label>
-        <label className="block text-sm mb-2">
-          Amount
-          <input
-            type="number"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="border rounded px-2 py-1 w-full mt-1"
-          />
-        </label>
-        <label className="block text-sm mb-2">
-          Date
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="border rounded px-2 py-1 w-full mt-1"
-          />
-        </label>
-        <label className="block text-sm mb-1">
-          Category
-          <select
-            value={categorySelect}
-            onChange={(e) => setCategorySelect(e.target.value)}
-            className="border rounded px-2 py-1 w-full mt-1"
-          >
-            {KNOWN_CATEGORIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-            <option value="__custom__">+ new category…</option>
-          </select>
-        </label>
-        {categorySelect === "__custom__" && (
-          <input
-            value={customCategory}
-            onChange={(e) => setCustomCategory(e.target.value)}
-            placeholder="e.g. medical"
-            className="border rounded px-2 py-1 w-full mb-2 text-sm"
-            autoFocus
-          />
-        )}
-        <div className="flex items-center justify-between mt-4">
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <label className="block text-sm mb-2">
+            Payee
+            <input
+              value={payee}
+              onChange={(e) => setPayee(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Amount
+            <input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Date
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-1">
+            Category
+            <select
+              value={categorySelect}
+              onChange={(e) => setCategorySelect(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            >
+              {KNOWN_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              <option value="__custom__">+ new category…</option>
+            </select>
+          </label>
+          {categorySelect === "__custom__" && (
+            <input
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+              placeholder="e.g. medical"
+              className="border rounded px-2 py-1 w-full mb-2 text-sm"
+              autoFocus
+            />
+          )}
+          <label className="block text-sm mb-2">
+            Recurring type
+            <select
+              value={recurringType}
+              onChange={(e) => setRecurringType(e.target.value as "one_off" | "ongoing")}
+              className="border rounded px-2 py-1 w-full mt-1"
+            >
+              <option value="one_off">one_off</option>
+              <option value="ongoing">ongoing</option>
+            </select>
+          </label>
+          <label className="block text-sm mb-2">
+            Payment category
+            <input
+              value={paymentCategory}
+              onChange={(e) => setPaymentCategory(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Payment detail
+            <input
+              value={paymentDetail}
+              onChange={(e) => setPaymentDetail(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Inferred purpose
+            <textarea
+              value={inferredPurpose}
+              onChange={(e) => setInferredPurpose(e.target.value)}
+              rows={2}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Notes
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="block text-sm mb-2">
+            Reimbursement owner
+            <input
+              value={reimbursementOwner}
+              onChange={(e) => setReimbursementOwner(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm mb-2">
+            <input
+              type="checkbox"
+              checked={isTaxDeductible}
+              onChange={(e) => setIsTaxDeductible(e.target.checked)}
+              className="rounded"
+            />
+            Is tax deductible
+          </label>
+          <label className="block text-sm mb-2">
+            Reimbursement status
+            <select
+              value={reimbursementStatus}
+              onChange={(e) =>
+                setReimbursementStatus(e.target.value as "none" | "pending" | "reimbursed")
+              }
+              className="border rounded px-2 py-1 w-full mt-1"
+            >
+              <option value="none">none</option>
+              <option value="pending">pending</option>
+              <option value="reimbursed">reimbursed</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t">
           <button
             onClick={async () => {
               if (!window.confirm("Delete this receipt? This can't be undone.")) return;
