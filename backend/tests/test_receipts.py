@@ -49,6 +49,7 @@ def make_receipt_orm_mock(**overrides) -> MagicMock:
         updated_at=datetime.now(timezone.utc),
         deleted_at=None,
         attachments=[],
+        canonical_payee=None,
     )
     defaults.update(overrides)
     r = MagicMock()

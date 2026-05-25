@@ -4,7 +4,7 @@ Payee normalization routes (owner-only).
 from __future__ import annotations
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,12 +119,12 @@ async def create_alias(
     )
 
 
-@router.delete("/aliases/{alias_id}", status_code=204)
+@router.delete("/aliases/{alias_id}", status_code=204, response_model=None)
 async def delete_alias(
     alias_id: str,
     session: AsyncSession = Depends(get_session),
     _user: dict = Depends(require_owner),
-) -> None:
+) -> Response:
     result = await session.execute(
         select(PayeeAlias).where(PayeeAlias.id == uuid.UUID(alias_id))
     )
@@ -133,6 +133,7 @@ async def delete_alias(
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(row)
     await session.commit()
+    return Response(status_code=204)
 
 
 @router.patch("/aliases/{alias_id}", response_model=AliasOut)
