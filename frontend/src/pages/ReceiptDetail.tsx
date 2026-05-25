@@ -119,7 +119,10 @@ export default function ReceiptDetailPage() {
 
       <div className="flex items-start justify-between mb-5">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{receipt.payee}</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">{receipt.canonical_payee || receipt.payee}</h1>
+          {receipt.canonical_payee && receipt.canonical_payee !== receipt.payee && (
+            <div className="text-xs text-slate-400 mt-0.5">{receipt.payee}</div>
+          )}
           <div className="text-sm text-slate-500 mt-1">{receipt.date}</div>
         </div>
         <div className="flex items-center gap-3">

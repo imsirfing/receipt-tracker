@@ -12,6 +12,7 @@ const ChatReport = lazy(() => import("./pages/ChatReport"));
 const ReceiptDetailPage = lazy(() => import("./pages/ReceiptDetail"));
 const AccessManager = lazy(() => import("./pages/AccessManager"));
 const Reports = lazy(() => import("./pages/Reports"));
+const PayeeNormalizerPage = lazy(() => import("./pages/PayeeNormalizer"));
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/chat" element={<ChatReport />} />
             <Route path="/admin/access" element={<AccessManager />} />
+            <Route path="/admin/payees" element={<PayeeNormalizerPage />} />
           </Route>
         </Routes>
       </Suspense>

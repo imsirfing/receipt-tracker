@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, FileText, LogOut, MessageSquare, Receipt, RefreshCw, ShieldCheck } from "lucide-react";
+import { BarChart3, ClipboardList, FileText, LogOut, MessageSquare, Receipt, RefreshCw, Search, ShieldCheck, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
 import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
+import CommandPalette from "./CommandPalette";
 
 const baseNav = [
   { to: "/", label: "Dashboard", icon: BarChart3, writeOnly: false },
@@ -32,7 +33,10 @@ export default function Layout() {
 
   const nav = [
     ...baseNav.filter(item => !item.writeOnly || canWrite),
-    ...(isOwner ? [{ to: "/admin/access", label: "Access", icon: ShieldCheck, writeOnly: false }] : []),
+    ...(isOwner ? [
+      { to: "/admin/access", label: "Access", icon: ShieldCheck, writeOnly: false },
+      { to: "/admin/payees", label: "Payee Rules", icon: Tag, writeOnly: false },
+    ] : []),
   ];
 
   const handleSync = async () => {
@@ -78,6 +82,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
+      <CommandPalette />
       <aside className="hidden md:flex w-60 bg-white border-r border-slate-200 p-4 flex-col">
         <div className="text-lg font-semibold mb-4 text-indigo-700">Receipts</div>
         <button
@@ -93,6 +98,18 @@ export default function Layout() {
             Last synced {lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </div>
         )}
+        {/* Cmd+K search button */}
+        <button
+          onClick={() => {
+            const ev = new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true });
+            window.dispatchEvent(ev);
+          }}
+          className="flex items-center gap-2 w-full mb-4 px-3 py-2 rounded-lg border border-slate-200 text-slate-500 text-sm hover:bg-slate-50 transition-colors"
+        >
+          <Search size={14} />
+          <span className="flex-1 text-left text-slate-400">Search…</span>
+          <kbd className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-400">⌘K</kbd>
+        </button>
         <nav className="flex-1 space-y-1">
           {nav.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;

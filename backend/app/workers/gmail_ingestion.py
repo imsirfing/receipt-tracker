@@ -26,6 +26,7 @@ from app.db import AsyncSessionLocal
 from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, RecurringType
 from app.services.document_parser import DocumentParser, NotAReceiptError, ReceiptExtraction
+from app.services.payee_normalizer import normalize_payee
 from app.utils.email_parsing import parse_sub_address_variable
 
 logger = logging.getLogger(__name__)
@@ -244,6 +245,7 @@ async def _persist_receipt(
     receipt = Receipt(
         id=uuid.uuid4(),
         payee=extraction.payee,
+        canonical_payee=normalize_payee(extraction.payee),
         amount=extraction.amount,
         date=parsed_date,
         inferred_purpose=extraction.inferred_purpose,

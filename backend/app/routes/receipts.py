@@ -32,6 +32,7 @@ from app.auth import get_current_user
 from app.db import get_session
 from app.models.pending_email import PendingEmail
 from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
+from app.services.payee_normalizer import normalize_payee
 from app.workers.gmail_ingestion import screenshot_gmail_message
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
@@ -52,6 +53,7 @@ async def create_receipt(
     receipt = Receipt(
         id=uuid.uuid4(),
         payee=body.payee,
+        canonical_payee=normalize_payee(body.payee),
         amount=body.amount,
         date=body.date,
         inferred_purpose=body.inferred_purpose or "",

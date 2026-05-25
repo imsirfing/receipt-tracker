@@ -71,6 +71,7 @@ export const getIngestStatus = async (): Promise<IngestStatus> => {
 export interface Receipt {
   id: string;
   payee: string;
+  canonical_payee?: string | null;
   amount: number;
   date: string;
   inferred_purpose: string | null;
@@ -450,3 +451,72 @@ export async function downloadEvidencePackage(receiptId: string): Promise<void> 
   link.remove();
   window.URL.revokeObjectURL(url);
 }
+
+// ---------------------------------------------------------------------------
+// Payee normalization
+// ---------------------------------------------------------------------------
+
+export interface PayeeAlias {
+  id: string;
+  pattern: string;
+  canonical: string;
+  priority: number;
+  enabled: boolean;
+  note: string | null;
+  created_at: string;
+}
+
+export interface BuiltinRule {
+  priority: number;
+  pattern: string;
+  canonical: string;
+}
+
+export interface NormalizeResult {
+  updated: number;
+}
+
+export interface PreviewOut {
+  raw: string;
+  canonical: string | null;
+  matched: boolean;
+}
+
+export const listPayeeAliases = async (): Promise<PayeeAlias[]> => {
+  const res = await api.get<PayeeAlias[]>("/api/payees/aliases");
+  return res.data;
+};
+
+export const createPayeeAlias = async (body: {
+  pattern: string;
+  canonical: string;
+  priority?: number;
+  note?: string;
+}): Promise<PayeeAlias> => {
+  const res = await api.post<PayeeAlias>("/api/payees/aliases", body);
+  return res.data;
+};
+
+export const deletePayeeAlias = async (id: string): Promise<void> => {
+  await api.delete(`/api/payees/aliases/${id}`);
+};
+
+export const togglePayeeAlias = async (id: string, enabled: boolean): Promise<PayeeAlias> => {
+  const res = await api.patch<PayeeAlias>(`/api/payees/aliases/${id}`, { enabled });
+  return res.data;
+};
+
+export const previewNormalize = async (payee: string): Promise<PreviewOut> => {
+  const res = await api.post<PreviewOut>("/api/payees/preview", { payee });
+  return res.data;
+};
+
+export const normalizeAll = async (): Promise<NormalizeResult> => {
+  const res = await api.post<NormalizeResult>("/api/payees/normalize-all");
+  return res.data;
+};
+
+export const listBuiltinRules = async (): Promise<BuiltinRule[]> => {
+  const res = await api.get<BuiltinRule[]>("/api/payees/builtin");
+  return res.data;
+};

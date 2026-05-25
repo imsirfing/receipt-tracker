@@ -30,6 +30,7 @@ class ReceiptOut(BaseModel):
 
     id: uuid.UUID
     payee: str
+    canonical_payee: Optional[str] = None
     amount: float
     date: _Date
     inferred_purpose: Optional[str]

@@ -23,6 +23,7 @@ class Receipt(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     payee: Mapped[str] = mapped_column(String(255), nullable=False)
+    canonical_payee: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     inferred_purpose: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)

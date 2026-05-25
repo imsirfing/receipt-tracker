@@ -356,7 +356,12 @@ export default function ReceiptsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2">{r.date}</td>
-                  <td className="px-3 py-2">{r.payee}</td>
+                  <td className="px-3 py-2">
+                    <div>{r.canonical_payee || r.payee}</div>
+                    {r.canonical_payee && r.canonical_payee !== r.payee && (
+                      <div className="text-xs text-slate-400 truncate max-w-xs">{r.payee}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{fmtCurrency(r.amount)}</td>
                   <td className="px-3 py-2">
                     {r.category_variable === "uncategorized" ? (
