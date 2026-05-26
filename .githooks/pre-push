@@ -1,0 +1,13 @@
+#!/bin/bash
+# Pre-push hook: runs unit tests before any push goes out.
+# Install: git config core.hooksPath .githooks
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+echo "🤙 Running tests before push..."
+cd "$REPO_ROOT/backend"
+python -m pytest tests/ -m unit -v --tb=short
+
+echo "✅ All good — sending it."

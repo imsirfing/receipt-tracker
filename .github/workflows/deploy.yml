@@ -26,7 +26,11 @@ jobs:
         cache-dependency-path: backend/requirements.txt
 
     - name: Install test dependencies
-      run: pip install pydantic fastapi anyio pytest pytest-asyncio httpx sqlalchemy reportlab
+      run: pip install -r backend/requirements.txt
+
+    - name: Import smoke test
+      working-directory: backend
+      run: python -c "from app.main import app; print('Import OK')"
 
     - name: Run unit tests
       working-directory: backend
