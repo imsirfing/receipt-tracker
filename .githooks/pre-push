@@ -8,6 +8,6 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 echo "🤙 Running tests before push..."
 cd "$REPO_ROOT/backend"
-python -m pytest tests/ -m unit -v --tb=short
+python3 -m pytest tests/ -m unit -v --tb=short
 
 echo "✅ All good — sending it."
