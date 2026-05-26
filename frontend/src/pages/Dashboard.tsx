@@ -100,6 +100,9 @@ export default function Dashboard() {
   const unreimbursed = filteredReceipts
     .filter((r) => !r.is_reimbursed)
     .reduce((s, r) => s + Number(r.amount), 0);
+  const pendingReceipts = filteredReceipts.filter((r) => r.reimbursement_status === "pending");
+  const pendingTotal = pendingReceipts.reduce((s, r) => s + Number(r.amount), 0);
+  const pendingCount = pendingReceipts.length;
   const uncategorizedCount = filteredReceipts.filter((r) => r.category_variable === "uncategorized").length;
   const recurringTotal = filteredReceipts
     .filter((r) => r.recurring_type === "ongoing")
@@ -169,10 +172,18 @@ export default function Dashboard() {
       {error && <div className="text-red-600 mb-4">{error}</div>}
       {loading && <div className="text-slate-500">Loading…</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
         <Card label="Total receipts" value={filteredReceipts.length.toString()} />
         <Card label="Total spend" value={fmtCurrency(totalSpend)} />
         <Card label="Unreimbursed" value={fmtCurrency(unreimbursed)} accent />
+        <div
+          className="bg-white rounded-xl shadow-sm border border-orange-200 p-4 cursor-pointer hover:border-orange-400 transition-colors"
+          onClick={() => navigate("/receipts?reimbursement_status=pending")}
+        >
+          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pending reimb.</div>
+          <div className="text-xl md:text-2xl font-bold text-orange-500">{fmtCurrency(pendingTotal)}</div>
+          <div className="text-xs text-slate-400 mt-1">{pendingCount} receipt{pendingCount !== 1 ? "s" : ""}</div>
+        </div>
         <Card label="Uncategorized" value={uncategorizedCount.toString()} amber />
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Recurring spend</div>
