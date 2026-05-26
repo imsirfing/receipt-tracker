@@ -14,18 +14,18 @@ export function setApiToken(token: string | null) {
 }
 
 api.interceptors.request.use(async (config) => {
-  let token = _apiToken;
-  if (!token) {
-    // Fallback: get token directly from auth.currentUser.
-    await auth.authStateReady();
-    const user = auth.currentUser;
-    if (user) {
-      token = await user.getIdToken();
-      _apiToken = token; // cache for subsequent requests
-    }
-  }
-  if (token) {
+  await auth.authStateReady();
+  const user = auth.currentUser;
+  if (user) {
+    // Always call getIdToken() — Firebase returns the cached token if still
+    // valid, or silently refreshes it if expired. Never use the cached string
+    // directly, as it goes stale after ~1 hour.
+    const token = await user.getIdToken();
+    _apiToken = token;
     config.headers.Authorization = `Bearer ${token}`;
+  } else if (_apiToken) {
+    // Fallback for explicitly-set tokens (e.g. tests / server-side flows).
+    config.headers.Authorization = `Bearer ${_apiToken}`;
   }
   return config;
 });
