@@ -98,7 +98,7 @@ export default function Dashboard() {
 
   const totalSpend = filteredReceipts.reduce((s, r) => s + Number(r.amount), 0);
   const unreimbursed = filteredReceipts
-    .filter((r) => !r.is_reimbursed)
+    .filter((r) => r.reimbursement_status === "none")
     .reduce((s, r) => s + Number(r.amount), 0);
   const pendingReceipts = filteredReceipts.filter((r) => r.reimbursement_status === "pending");
   const pendingTotal = pendingReceipts.reduce((s, r) => s + Number(r.amount), 0);
@@ -121,7 +121,7 @@ export default function Dashboard() {
   const unreimbursedByCategory = useMemo(() => {
     const map: Record<string, number> = {};
     filteredReceipts
-      .filter(r => !r.is_reimbursed)
+      .filter(r => r.reimbursement_status === "none")
       .forEach(r => {
         const cat = r.category_variable || "uncategorized";
         map[cat] = (map[cat] ?? 0) + Number(r.amount);
@@ -172,27 +172,31 @@ export default function Dashboard() {
       {error && <div className="text-red-600 mb-4">{error}</div>}
       {loading && <div className="text-slate-500">Loading…</div>}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
-        <Card label="Total receipts" value={filteredReceipts.length.toString()} />
-        <Card label="Total spend" value={fmtCurrency(totalSpend)} />
-        <Card label="Unreimbursed" value={fmtCurrency(unreimbursed)} accent />
+      {/* Stat tiles — row 1: 4 tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <Card label="total receipts" value={filteredReceipts.length.toString()} />
+        <Card label="total spend" value={fmtCurrency(totalSpend)} />
+        <Card label="unreimbursed" value={fmtCurrency(unreimbursed)} accent />
         <div
-          className="bg-white rounded-xl shadow-sm border border-orange-200 p-4 cursor-pointer hover:border-orange-400 transition-colors"
+          className="bg-white rounded-xl shadow-sm border border-orange-200 p-3 cursor-pointer hover:border-orange-400 transition-colors"
           onClick={() => navigate("/receipts?reimbursement_status=pending")}
         >
-          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Pending reimb.</div>
-          <div className="text-xl md:text-2xl font-bold text-orange-500">{fmtCurrency(pendingTotal)}</div>
+          <div className="text-xs font-medium text-slate-500 mb-1">pending reimb.</div>
+          <div className="text-lg font-bold text-orange-500">{fmtCurrency(pendingTotal)}</div>
           <div className="text-xs text-slate-400 mt-1">{pendingCount} receipt{pendingCount !== 1 ? "s" : ""}</div>
         </div>
-        <Card label="Uncategorized" value={uncategorizedCount.toString()} amber />
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Recurring spend</div>
-          <div className="text-xl md:text-2xl font-bold text-violet-600">{fmtCurrency(recurringTotal)}</div>
+      </div>
+      {/* Stat tiles — row 2: 3 tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+        <Card label="uncategorized" value={uncategorizedCount.toString()} amber />
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+          <div className="text-xs font-medium text-slate-500 mb-1">recurring spend</div>
+          <div className="text-lg font-bold text-violet-600">{fmtCurrency(recurringTotal)}</div>
           <div className="text-xs text-slate-400 mt-1">vs {fmtCurrency(oneOffTotal)} one-off</div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Avg / month</div>
-          <div className="text-xl md:text-2xl font-bold text-sky-600">{fmtCurrency(avgMonthlySpend)}</div>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+          <div className="text-xs font-medium text-slate-500 mb-1">avg / month</div>
+          <div className="text-lg font-bold text-sky-600">{fmtCurrency(avgMonthlySpend)}</div>
           <div className="text-xs text-slate-400 mt-1">across {new Set(filteredReceipts.map(r => r.date.slice(0,7))).size} months</div>
         </div>
       </div>
@@ -311,9 +315,9 @@ export default function Dashboard() {
 
 function Card({ label, value, accent, amber }: { label: string; value: string; accent?: boolean; amber?: boolean }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className={`text-xl md:text-2xl font-semibold mt-1 ${accent ? "text-indigo-600" : amber ? "text-amber-600" : ""}`}>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3">
+      <div className="text-xs font-medium text-slate-500 mb-1">{label}</div>
+      <div className={`text-lg font-bold mt-1 ${accent ? "text-indigo-600" : amber ? "text-amber-600" : ""}`}>
         {value}
       </div>
     </div>
