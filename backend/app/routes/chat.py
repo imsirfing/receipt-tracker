@@ -60,10 +60,18 @@ def _parse_intent(message: str) -> Dict[str, Optional[object]]:
 
 
 async def _query_receipts(
-    session: AsyncSession, filters: Dict[str, Optional[object]]
+    session: AsyncSession,
+    filters: Dict[str, Optional[object]],
+    allowed_categories: Optional[List[str]] = None,
 ) -> List[Receipt]:
     stmt = select(Receipt)
-    if filters.get("category") is not None:
+    # Enforce per-user category access
+    if allowed_categories is not None:
+        if filters.get("category") is not None and filters["category"] in allowed_categories:
+            stmt = stmt.where(Receipt.category_variable == filters["category"])
+        else:
+            stmt = stmt.where(Receipt.category_variable.in_(allowed_categories))
+    elif filters.get("category") is not None:
         stmt = stmt.where(Receipt.category_variable == filters["category"])
     if filters.get("is_reimbursed") is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(filters["is_reimbursed"]))
@@ -213,9 +221,9 @@ async def chat_report(
 ) -> StreamingResponse:
     filters = _parse_intent(payload.message)
     # Enforce category-scoped access for non-owner users
-    if current_user["access_category"] != "all":
-        filters["category"] = current_user["access_category"]
-    receipts = await _query_receipts(session, filters)
+    access_categories = current_user.get("access_categories", ["all"])
+    allowed = None if "all" in access_categories else access_categories
+    receipts = await _query_receipts(session, filters, allowed_categories=allowed)
     pdf_bytes = _build_pdf(payload.message, receipts)
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
