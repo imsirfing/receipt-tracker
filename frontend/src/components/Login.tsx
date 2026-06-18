@@ -20,11 +20,13 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="bg-white p-8 rounded-2xl shadow-lg w-96 text-center">
+        <img src="/logo.png" alt="Receipt Tracker" className="w-24 h-24 mx-auto mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Receipt Tracker</h1>
+        <p className="text-slate-400 text-sm mb-4">Automatically captures receipts from your Gmail, categorizes spending, and generates reimbursement reports — all in one place.</p>
         {unauthorized ? (
           <p className="text-amber-600 text-sm mb-6">That account doesn't have access. Try a different account or contact James.</p>
         ) : (
-          <p className="text-slate-500 mb-6">Sign in to view your receipts.</p>
+          <p className="text-slate-500 text-sm mb-6">Sign in with your Google account to get started.</p>
         )}
         <button
           onClick={handleSignIn}
