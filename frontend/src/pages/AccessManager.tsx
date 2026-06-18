@@ -105,7 +105,7 @@ export default function AccessManager() {
   const [editSaving, setEditSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userLoading && !isOwner) navigate("/");
+    if (!userLoading && !isOwner) navigate("/dashboard");
   }, [isOwner, userLoading, navigate]);
 
   useEffect(() => {

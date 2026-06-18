@@ -11,7 +11,7 @@ export default function Login() {
   const handleSignIn = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error("sign-in failed", err);
     }

@@ -21,6 +21,7 @@ export default function App() {
       <Suspense fallback={<div className="flex items-center justify-center h-screen text-slate-400 text-sm">Loading…</div>}>
         <Routes>
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
           <Route
             element={
@@ -29,7 +30,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/receipts" element={<ReceiptsPage />} />
             <Route path="/receipts/:id" element={<ReceiptDetailPage />} />

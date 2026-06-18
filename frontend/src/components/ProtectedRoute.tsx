@@ -11,7 +11,7 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     return <div className="min-h-screen flex items-center justify-center text-slate-400 text-sm">Loading…</div>;
   }
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
   if (accessDenied) {
     signOut();
