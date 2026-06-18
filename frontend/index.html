@@ -4,10 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Receipt Tracker</title>
+    <title>Receipt Tracker — Gmail Receipt Importer & Expense Tracker</title>
+    <meta name="description" content="Receipt Tracker automatically captures receipts from your Gmail, categorizes your spending, and generates reimbursement reports. Sign in with your Google account to get started." />
+    <meta property="og:title" content="Receipt Tracker" />
+    <meta property="og:description" content="Automatically captures receipts from your Gmail, categorizes spending, and generates reimbursement reports." />
+    <meta property="og:url" content="https://receipts.nopa.llc/" />
   </head>
   <body class="bg-slate-50">
     <div id="root"></div>
+    <noscript>
+      <div style="font-family:sans-serif;max-width:480px;margin:80px auto;text-align:center;padding:0 24px">
+        <h1 style="font-size:1.5rem;margin-bottom:8px">Receipt Tracker</h1>
+        <p style="color:#64748b;margin-bottom:24px">Automatically captures receipts from your Gmail, categorizes your spending, and generates reimbursement reports — all in one place.</p>
+        <a href="/" style="background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500">Sign in with Google</a>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
