@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import ReceiptsPage from "./pages/Receipts";
 import ReviewPage from "./pages/Review";
 import Privacy from "./pages/Privacy";
+import Landing from "./pages/Landing";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ChatReport = lazy(() => import("./pages/ChatReport"));
@@ -21,7 +22,7 @@ export default function App() {
       <Suspense fallback={<div className="flex items-center justify-center h-screen text-slate-400 text-sm">Loading…</div>}>
         <Routes>
           <Route path="/privacy" element={<Privacy />} />
-          <Route path="/" element={<Login />} />
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route
             element={
