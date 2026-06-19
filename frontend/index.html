@@ -12,11 +12,16 @@
   </head>
   <body class="bg-slate-50">
     <div id="root"></div>
+    <!-- Static link for search/verification crawlers that don't execute JS -->
+    <a href="/privacy" style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true" tabindex="-1">Privacy Policy</a>
     <noscript>
       <div style="font-family:sans-serif;max-width:480px;margin:80px auto;text-align:center;padding:0 24px">
         <h1 style="font-size:1.5rem;margin-bottom:8px">Receipt Tracker</h1>
         <p style="color:#64748b;margin-bottom:24px">Automatically captures receipts from your Gmail, categorizes your spending, and generates reimbursement reports — all in one place.</p>
         <a href="/" style="background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:500">Sign in with Google</a>
+        <p style="margin-top:24px;font-size:0.875rem">
+          <a href="/privacy" style="color:#64748b;text-decoration:underline">Privacy Policy</a>
+        </p>
       </div>
     </noscript>
     <script type="module" src="/src/main.tsx"></script>
