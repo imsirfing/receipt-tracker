@@ -56,9 +56,9 @@ interface ModalState {
 }
 
 export default function ReviewPage() {
-  const { canWrite, isOwner, loading } = useUser();
+  const { canWrite, isOwner, loading: userLoading } = useUser();
 
-  if (!loading && !isOwner) {
+  if (!userLoading && !isOwner) {
     return <Navigate to="/dashboard" replace />;
   }
   const [items, setItems] = useState<PendingEmail[]>([]);
