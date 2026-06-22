@@ -7,11 +7,11 @@ import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
 import CommandPalette from "./CommandPalette";
 
 const baseNav = [
-  { to: "/", label: "Dashboard", icon: BarChart3, writeOnly: false },
-  { to: "/review", label: "Review", icon: ClipboardList, writeOnly: true },
-  { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false },
-  { to: "/reports", label: "Reports", icon: FileText, writeOnly: false },
-  { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false },
+  { to: "/", label: "Dashboard", icon: BarChart3, writeOnly: false, ownerOnly: false },
+  { to: "/review", label: "Review", icon: ClipboardList, writeOnly: false, ownerOnly: true },
+  { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false, ownerOnly: false },
+  { to: "/reports", label: "Reports", icon: FileText, writeOnly: false, ownerOnly: false },
+  { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false, ownerOnly: false },
 ];
 
 export default function Layout() {
@@ -32,7 +32,7 @@ export default function Layout() {
   }, []);
 
   const nav = [
-    ...baseNav.filter(item => !item.writeOnly || canWrite),
+    ...baseNav.filter(item => (!item.writeOnly || canWrite) && (!item.ownerOnly || isOwner)),
     ...(isOwner ? [
       { to: "/admin/access", label: "Access", icon: ShieldCheck, writeOnly: false },
       { to: "/admin/payees", label: "Payee Rules", icon: Tag, writeOnly: false },

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { useUser } from "../user-context";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
@@ -55,7 +56,11 @@ interface ModalState {
 }
 
 export default function ReviewPage() {
-  const { canWrite } = useUser();
+  const { canWrite, isOwner, loading } = useUser();
+
+  if (!loading && !isOwner) {
+    return <Navigate to="/dashboard" replace />;
+  }
   const [items, setItems] = useState<PendingEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<ModalState | null>(null);

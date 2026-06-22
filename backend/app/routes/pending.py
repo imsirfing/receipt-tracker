@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from app.auth import get_current_user
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -59,7 +60,10 @@ async def list_pending(
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ) -> PendingListOut:
+    if not current_user["is_owner"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     stmt = select(PendingEmail)
     if search is not None and search.strip():
         term = f"%{search.strip()}%"
@@ -82,8 +86,12 @@ async def list_pending(
 
 @router.delete("/{pending_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def dismiss_pending(
-    pending_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+    pending_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ):
+    if not current_user["is_owner"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     result = await session.execute(
         select(PendingEmail).where(PendingEmail.id == pending_id)
     )
@@ -99,7 +107,10 @@ async def convert_to_receipt(
     pending_id: uuid.UUID,
     body: ConvertRequest,
     session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
 ):
+    if not current_user["is_owner"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     result = await session.execute(
         select(PendingEmail).where(PendingEmail.id == pending_id)
     )
