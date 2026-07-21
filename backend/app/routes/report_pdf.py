@@ -79,6 +79,10 @@ def _pie_image(items, w_in: float = 3.2, h_in: float = 2.6) -> Optional[Image]:
     """Pie chart from a list of CategoryStat-like objects."""
     if not items:
         return None
+    # Filter out zero/negative totals — matplotlib requires all wedge sizes > 0
+    items = [c for c in items if c.total > 0]
+    if not items:
+        return None
     labels = [c.category for c in items]
     values = [c.total for c in items]
     clrs = [_cat_color_mpl(i) for i in range(len(items))]
