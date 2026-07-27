@@ -45,6 +45,7 @@ class ReceiptOut(BaseModel):
     is_tax_deductible: bool = False
     reimbursement_owner: Optional[str] = None
     raw_email_id: str
+    gmail_thread_id: Optional[str] = None
     source: str = "manual"
     ingested_at: Optional[datetime] = None
     created_at: datetime

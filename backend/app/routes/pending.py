@@ -98,8 +98,13 @@ async def dismiss_pending(
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="pending email not found")
+    gmail_message_id = row.gmail_message_id
     await session.delete(row)
     await session.commit()
+    try:
+        archive_gmail_message(gmail_message_id)
+    except Exception as exc:
+        logger.warning("Failed to archive Gmail message %s: %s", gmail_message_id, exc)
 
 
 @router.post("/{pending_id}/convert", status_code=status.HTTP_201_CREATED)

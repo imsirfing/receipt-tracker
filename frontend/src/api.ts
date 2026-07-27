@@ -83,6 +83,7 @@ export interface Receipt {
   reimbursement_status: 'none' | 'pending' | 'reimbursed';
   reimbursed_at: string | null;
   raw_email_id: string;
+  gmail_thread_id?: string | null;
   source: string;
   ingested_at: string | null;
   created_at: string;

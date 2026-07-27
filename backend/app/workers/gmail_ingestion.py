@@ -219,6 +219,7 @@ async def _persist_receipt(
     session: AsyncSession,
     *,
     message_id: str,
+    thread_id: Optional[str] = None,
     category: str,
     extraction: ReceiptExtraction,
     gcs_uris: List[tuple[str, str, Optional[str]]],
@@ -254,6 +255,7 @@ async def _persist_receipt(
         category_variable=category,
         recurring_type=recurring,
         raw_email_id=message_id,
+        gmail_thread_id=thread_id or message_id,
         source="gmail_auto",
         ingested_at=datetime.now(timezone.utc),
     )
@@ -324,6 +326,7 @@ async def process_message(
         .get(userId="me", id=message_id, format="full")
         .execute()
     )
+    thread_id: Optional[str] = msg.get("threadId") or message_id
     payload = msg.get("payload", {})
     headers = payload.get("headers", [])
 
@@ -392,6 +395,7 @@ async def process_message(
     receipt = await _persist_receipt(
         session,
         message_id=message_id,
+        thread_id=thread_id,
         category=category,
         extraction=extraction,
         gcs_uris=uploaded,
@@ -415,7 +419,7 @@ async def poll_inbox_once() -> int:
 
     # Do NOT filter by is:unread — emails already opened in Gmail would be missed.
     # Deduplication is handled by the raw_email_id uniqueness check in _persist_receipt.
-    query = "to:jamestinsley.receipts"
+    query = "in:inbox to:jamestinsley.receipts"
     messages: List[dict] = []
     page_token: Optional[str] = None
     while True:

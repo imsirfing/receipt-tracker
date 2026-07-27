@@ -44,6 +44,7 @@ class Receipt(Base):
     reimbursement_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reimbursement_status: Mapped[str] = mapped_column(String(20), default=ReimbursementStatus.NONE.value, server_default="none", nullable=False)
     raw_email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    gmail_thread_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual", server_default="manual")
     ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -85,6 +86,7 @@ class Receipt(Base):
             "reimbursement_status": self.reimbursement_status,
             "reimbursed_at": self.reimbursed_at.isoformat() if self.reimbursed_at else None,
             "raw_email_id": self.raw_email_id,
+            "gmail_thread_id": self.gmail_thread_id,
             "source": self.source,
             "ingested_at": self.ingested_at.isoformat() if self.ingested_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

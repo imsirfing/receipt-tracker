@@ -103,8 +103,9 @@ export default function ReceiptDetailPage() {
 
   const uncategorized = receipt.category_variable === "uncategorized";
   const isGmailSource = receipt.source === "gmail_auto";
+  const gmailId = receipt.gmail_thread_id || receipt.raw_email_id;
   const gmailLink = isGmailSource && !receipt.raw_email_id.startsWith("manual-")
-    ? `https://mail.google.com/mail/u/0/#all/${receipt.raw_email_id}`
+    ? `https://mail.google.com/mail/u/0/#all/${gmailId}`
     : null;
 
   return (
@@ -302,7 +303,7 @@ export default function ReceiptDetailPage() {
           log={auditLog}
           loading={auditLoading}
           error={auditError}
-          rawEmailId={receipt.raw_email_id}
+          rawEmailId={receipt.gmail_thread_id || receipt.raw_email_id}
         />
       )}
 
@@ -361,6 +362,7 @@ function AuditTrailTab({
   const gmailLink = rawEmailId && !rawEmailId.startsWith("manual-")
     ? `https://mail.google.com/mail/u/0/#all/${rawEmailId}`
     : null;
+  // Note: AuditTrailTab receives rawEmailId; caller should pass gmail_thread_id when available
 
   return (
     <div className="space-y-3">
