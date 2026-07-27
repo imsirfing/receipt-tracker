@@ -15,9 +15,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "receipts",
-        sa.Column("gmail_thread_id", sa.String(255), nullable=True),
+    # Use IF NOT EXISTS — safe to re-run if column was added out-of-band
+    op.execute(
+        "ALTER TABLE receipts ADD COLUMN IF NOT EXISTS gmail_thread_id VARCHAR(255)"
     )
 
 
