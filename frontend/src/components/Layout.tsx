@@ -46,13 +46,17 @@ export default function Layout() {
       await triggerIngest();
       // Poll for completion
       let attempts = 0;
+      let sawRunning = false; // guard against stale running=false before task starts
       const maxAttempts = 120; // 2 minutes of polling
       await new Promise<void>((resolve) => {
         const poll = setInterval(async () => {
           attempts++;
           try {
             const status = await getIngestStatus();
-            if (!status.running) {
+            if (status.running) {
+              sawRunning = true;
+            }
+            if (!status.running && sawRunning) {
               clearInterval(poll);
               if (status.last_error) {
                 toast.error(`Sync error: ${status.last_error}`);

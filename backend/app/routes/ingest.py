@@ -42,9 +42,13 @@ class IngestStatus(BaseModel):
 
 
 async def _run_ingest() -> None:
-    _state.running = True
-    _state.started_at = datetime.now(timezone.utc)
-    _state.last_error = None
+    # Note: running/started_at/last_error are pre-set in trigger_ingest to
+    # close the race window. This function may be called directly in tests
+    # so we still set them here as a fallback.
+    if not _state.running:
+        _state.running = True
+        _state.started_at = datetime.now(timezone.utc)
+        _state.last_error = None
     try:
         count = await poll_inbox_once()
         _state.last_processed = count
@@ -62,6 +66,11 @@ async def trigger_ingest(background_tasks: BackgroundTasks) -> IngestStarted:
     """Kick off Gmail ingestion in the background and return immediately."""
     if _state.running:
         return IngestStarted(status="already_running", message="Sync already in progress.")
+    # Mark running=True synchronously so the frontend poll can't see a False
+    # window between trigger and actual task start, which causes duplicate toasts.
+    _state.running = True
+    _state.started_at = datetime.now(timezone.utc)
+    _state.last_error = None
     background_tasks.add_task(_run_ingest)
     return IngestStarted(status="started", message="Sync started in background.")
 
