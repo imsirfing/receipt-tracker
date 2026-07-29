@@ -21,6 +21,7 @@ import {
   downloadUnreimbursedReportPdf,
   UnreimbursedReport,
   ReportReceiptLine,
+  CreditLine,
 } from "../api";
 import { fmtCurrency } from "../utils";
 
@@ -493,13 +494,64 @@ export default function Reports() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 font-semibold text-slate-800">
-                    <td colSpan={drillDown ? 4 : 5} className="px-4 py-3 text-right text-sm">Total</td>
+                    <td colSpan={drillDown ? 4 : 5} className="px-4 py-3 text-right text-sm">Total expenses</td>
                     <td className="px-4 py-3 text-right text-sm">{fmtCurrency(report.summary.total)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </div>
+
+          {/* Credits / Adjustments section */}
+          {report.credits && report.credits.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-4">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <h2 className="text-sm font-semibold text-slate-700">Credits / Adjustments</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-slate-500 border-b border-slate-100 bg-slate-50">
+                      <th className="text-left px-4 py-2 font-medium">Created</th>
+                      <th className="text-left px-4 py-2 font-medium">Reason</th>
+                      <th className="text-left px-4 py-2 font-medium">Notes</th>
+                      <th className="text-right px-4 py-2 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(report.credits as CreditLine[]).map((c) => (
+                      <tr key={c.id} className="border-b border-slate-50 hover:bg-slate-50">
+                        <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                          {new Date(c.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600 capitalize">{c.reason}</td>
+                        <td className="px-4 py-2.5 text-slate-500 text-xs max-w-[200px] truncate">
+                          {c.notes ?? "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-red-600 whitespace-nowrap">
+                          −{fmtCurrency(c.amount_cents / 100)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 font-semibold">
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm text-slate-700">Total credits</td>
+                      <td className="px-4 py-3 text-right text-sm text-red-600">
+                        −{fmtCurrency((report.total_credits_cents ?? 0) / 100)}
+                      </td>
+                    </tr>
+                    <tr className="bg-indigo-50 font-bold text-indigo-800">
+                      <td colSpan={3} className="px-4 py-3 text-right text-sm">Net due</td>
+                      <td className="px-4 py-3 text-right text-sm">
+                        {fmtCurrency(report.net_due_cents ?? report.summary.total)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -30,6 +30,7 @@ class ReceiptExtraction(BaseModel):
     recurring_type: str
     payment_category: str
     payment_detail: str
+    invoice_number: Optional[str] = None
 
 
 SYSTEM_PROMPT = (
@@ -88,6 +89,10 @@ EXTRACTION_TOOL = {
             "payment_detail": {
                 "type": "string",
                 "description": "Concise label for the specific line item or service (e.g. 'Fall 2026 soccer registration').",
+            },
+            "invoice_number": {
+                "type": "string",
+                "description": "Invoice or reference number (e.g. INV-1042, #00234). Null if not present.",
             },
         },
         "required": ["payee", "amount", "date", "inferred_purpose", "recurring_type", "payment_category", "payment_detail"],

@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db import get_session
-from app.models.receipt import Receipt
+from app.models.receipt import Receipt, ReimbursementCredit
 from app.schemas.reports import (
     CategoryStat,
+    CreditLine,
     MonthStat,
     ReceiptLine,
     ReportSummary,
@@ -113,6 +114,28 @@ async def get_unreimbursed_report(
     all_result = await session.execute(base_stmt.order_by(Receipt.date.desc()))
     all_receipts = all_result.scalars().all()
 
+    # --- Fetch pending reimbursement credits ---
+    credits_result = await session.execute(
+        select(ReimbursementCredit)
+        .where(ReimbursementCredit.status == "pending")
+        .order_by(ReimbursementCredit.created_at.desc())
+    )
+    pending_credits = credits_result.scalars().all()
+    credit_lines = [
+        CreditLine(
+            id=c.id,
+            original_receipt_id=c.original_receipt_id,
+            amount_cents=c.amount_cents,
+            reason=c.reason,
+            notes=c.notes,
+            status=c.status,
+            applied_at=c.applied_at,
+            created_at=c.created_at,
+        )
+        for c in pending_credits
+    ]
+    total_credits_cents = sum(c.amount_cents for c in pending_credits)
+
     if not all_receipts:
         return UnreimbursedReportOut(
             filter_by=filter_by,
@@ -129,6 +152,9 @@ async def get_unreimbursed_report(
             stacked_by_month_payment=[],
             payment_categories=[],
             receipts=[],
+            credits=credit_lines,
+            total_credits_cents=total_credits_cents,
+            net_due_cents=-(total_credits_cents / 100.0),
         )
 
     # --- Summary ---
@@ -245,6 +271,8 @@ async def get_unreimbursed_report(
         for r in paginated
     ]
 
+    net_due_cents = round(grand_total * 100) - total_credits_cents
+
     return UnreimbursedReportOut(
         filter_by=filter_by,
         filter_value=filter_value,
@@ -266,4 +294,7 @@ async def get_unreimbursed_report(
         stacked_by_month_payment=stacked_by_month_payment,
         payment_categories=payment_categories,
         receipts=receipt_lines,
+        credits=credit_lines,
+        total_credits_cents=total_credits_cents,
+        net_due_cents=net_due_cents / 100.0,
     )

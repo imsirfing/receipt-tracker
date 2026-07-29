@@ -15,6 +15,9 @@ const ReceiptDetailPage = lazy(() => import("./pages/ReceiptDetail"));
 const AccessManager = lazy(() => import("./pages/AccessManager"));
 const Reports = lazy(() => import("./pages/Reports"));
 const PayeeNormalizerPage = lazy(() => import("./pages/PayeeNormalizer"));
+const CashBoxesPage = lazy(() => import("./pages/CashBoxes"));
+const CashBoxDetailPage = lazy(() => import("./pages/CashBoxDetail"));
+const DuplicateReviewPage = lazy(() => import("./pages/DuplicateReview"));
 
 export default function App() {
   return (
@@ -39,6 +42,9 @@ export default function App() {
             <Route path="/chat" element={<ChatReport />} />
             <Route path="/admin/access" element={<AccessManager />} />
             <Route path="/admin/payees" element={<PayeeNormalizerPage />} />
+            <Route path="/cash-boxes" element={<CashBoxesPage />} />
+            <Route path="/cash-boxes/:id" element={<CashBoxDetailPage />} />
+            <Route path="/duplicates" element={<DuplicateReviewPage />} />
           </Route>
         </Routes>
       </Suspense>

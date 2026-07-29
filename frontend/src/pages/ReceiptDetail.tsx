@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUser } from "../user-context";
 import { fmtCurrency } from "../utils";
-import { downloadAttachment, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, Receipt, AuditEntry } from "../api";
+import { downloadAttachment, getReceipt, getReceiptAudit, updateReceipt, downloadEvidencePackage, listCashBoxes, getLinkedReceipts, createCredit, Receipt, AuditEntry, CashBox, LinkedReceipt } from "../api";
+// CashBox imported for EditModal use
 import { ArrowLeft, Pencil, X, CheckCircle, Edit3, Trash2, Clock } from "lucide-react";
 
 const KNOWN_CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
@@ -24,6 +25,13 @@ export default function ReceiptDetailPage() {
   const [auditLog, setAuditLog] = useState<AuditEntry[] | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [linkedReceipts, setLinkedReceipts] = useState<LinkedReceipt[]>([]);
+  const [showCreditModal, setShowCreditModal] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    getLinkedReceipts(id).then(setLinkedReceipts).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -152,12 +160,20 @@ export default function ReceiptDetailPage() {
             {evidenceLoading ? "Generating…" : "📦 Evidence Package"}
           </button>
           {canWrite && (
-            <button
-              onClick={() => setEditing(true)}
-              className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
-            >
-              <Pencil size={12} /> Edit
-            </button>
+            <>
+              <button
+                onClick={() => setEditing(true)}
+                className="inline-flex items-center gap-1 text-xs bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded"
+              >
+                <Pencil size={12} /> Edit
+              </button>
+              <button
+                onClick={() => setShowCreditModal(true)}
+                className="inline-flex items-center gap-1 text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-2 py-1 rounded"
+              >
+                Add Credit / Refund
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -216,6 +232,9 @@ export default function ReceiptDetailPage() {
               <dt className="text-slate-500">Payment detail</dt>
               <dd className="text-slate-800 break-words">{receipt.payment_detail ?? "—"}</dd>
 
+              <dt className="text-slate-500">Payment method</dt>
+              <dd className="text-slate-800 capitalize">{(receipt as any).payment_method ?? "—"}</dd>
+
               <dt className="text-slate-500">Recurring</dt>
               <dd className="text-slate-800">{receipt.recurring_type}</dd>
 
@@ -271,6 +290,38 @@ export default function ReceiptDetailPage() {
             </dl>
           </div>
 
+          {/* Linked Documents */}
+          {linkedReceipts.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-4">
+              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Linked Documents</div>
+              <div className="flex flex-col gap-3">
+                {linkedReceipts.map((lr) => (
+                  <div key={lr.candidate_id} className="flex items-start justify-between gap-3 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-slate-800 truncate">
+                        {lr.receipt.canonical_payee || lr.receipt.payee}
+                      </div>
+                      <div className="text-slate-500 text-xs mt-0.5">
+                        {lr.receipt.date} · {fmtCurrency(lr.receipt.amount)}
+                        {lr.receipt.invoice_number && ` · ${lr.receipt.invoice_number}`}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {lr.match_reason.replace(/_/g, " ")}
+                        {lr.reviewed_at && ` · linked ${new Date(lr.reviewed_at).toLocaleDateString()}`}
+                      </div>
+                    </div>
+                    <a
+                      href={`/receipts/${lr.receipt.id}`}
+                      className="shrink-0 text-xs text-indigo-600 hover:underline"
+                    >
+                      View ↗
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Attachments */}
           {receipt.attachments.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
@@ -309,6 +360,12 @@ export default function ReceiptDetailPage() {
 
       {editing && receipt && (
         <EditModal receipt={receipt} onClose={() => setEditing(false)} onSave={handleSave} />
+      )}
+      {showCreditModal && receipt && (
+        <AddCreditModal
+          receipt={receipt}
+          onClose={() => setShowCreditModal(false)}
+        />
       )}
     </div>
   );
@@ -479,6 +536,13 @@ function EditModal({
   const [notes, setNotes] = useState(receipt.notes ?? "");
   const [isTaxDeductible, setIsTaxDeductible] = useState(receipt.is_tax_deductible ?? false);
   const [reimbursementOwner, setReimbursementOwner] = useState(receipt.reimbursement_owner ?? "");
+  const [paymentMethod, setPaymentMethod] = useState((receipt as any).payment_method ?? "");
+  const [cashBoxId, setCashBoxId] = useState((receipt as any).cash_box_id ?? "");
+  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
+
+  useEffect(() => {
+    listCashBoxes().then(setCashBoxes).catch(() => {});
+  }, []);
 
   const [saving, setSaving] = useState(false);
 
@@ -496,7 +560,9 @@ function EditModal({
         notes: notes || null,
         is_tax_deductible: isTaxDeductible,
         reimbursement_owner: reimbursementOwner || null,
-      });
+        ...(paymentMethod ? { payment_method: paymentMethod } : { payment_method: null }),
+        ...(cashBoxId ? { cash_box_id: cashBoxId } : { cash_box_id: null }),
+      } as any);
     } finally {
       setSaving(false);
     }
@@ -621,6 +687,36 @@ function EditModal({
               className="border rounded px-2 py-1 w-full mt-1"
             />
           </label>
+
+          <label className="block text-sm mb-1">
+            Payment Method
+            <select
+              value={paymentMethod}
+              onChange={(e) => { setPaymentMethod(e.target.value); if (e.target.value !== "cash") setCashBoxId(""); }}
+              className="border rounded px-2 py-1 w-full mt-1"
+            >
+              <option value="">— Not set —</option>
+              <option value="card">Card</option>
+              <option value="cash">Cash</option>
+              <option value="bank_transfer">Bank Transfer</option>
+            </select>
+          </label>
+
+          {paymentMethod === "cash" && cashBoxes.length > 0 && (
+            <label className="block text-sm mb-1">
+              Cash Box
+              <select
+                value={cashBoxId}
+                onChange={(e) => setCashBoxId(e.target.value)}
+                className="border rounded px-2 py-1 w-full mt-1"
+              >
+                <option value="">— None —</option>
+                {cashBoxes.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 mt-5">
@@ -633,6 +729,100 @@ function EditModal({
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
           >
             {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add Credit / Refund Modal
+// ---------------------------------------------------------------------------
+
+function AddCreditModal({ receipt, onClose }: { receipt: Receipt; onClose: () => void }) {
+  const [reason, setReason] = useState<"duplicate" | "refund" | "other">("refund");
+  const [amount, setAmount] = useState((receipt.amount ?? 0).toFixed(2));
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      const amountCents = Math.round(parseFloat(amount) * 100);
+      if (isNaN(amountCents) || amountCents <= 0) throw new Error("Invalid amount");
+      await createCredit({
+        original_receipt_id: receipt.id,
+        amount_cents: amountCents,
+        reason,
+        notes: notes.trim() || undefined,
+      });
+      onClose();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-medium">Add Credit / Refund</div>
+          <button onClick={onClose}><X size={18} /></button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block text-sm">
+            Reason
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value as typeof reason)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            >
+              <option value="refund">Refund</option>
+              <option value="duplicate">Duplicate charge</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+
+          <label className="block text-sm">
+            Credit amount ($)
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="border rounded px-2 py-1 w-full mt-1"
+            />
+          </label>
+
+          <label className="block text-sm">
+            Notes (optional)
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="border rounded px-2 py-1 w-full mt-1"
+              placeholder="e.g. Refunded by vendor on Jul 29"
+            />
+          </label>
+
+          {error && <div className="text-xs text-red-600">{error}</div>}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-3 py-1 text-sm">Cancel</button>
+          <button
+            onClick={submit}
+            disabled={saving}
+            className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1 rounded text-sm"
+          >
+            {saving ? "Saving…" : "Create Credit"}
           </button>
         </div>
       </div>

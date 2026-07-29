@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from enum import Enum as PyEnum
 from typing import Any, Dict, List, Optional
-from sqlalchemy import BigInteger, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Integer, JSON, String, Numeric, Date, Boolean, DateTime, ForeignKey, Index, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -45,12 +45,15 @@ class Receipt(Base):
     reimbursement_status: Mapped[str] = mapped_column(String(20), default=ReimbursementStatus.NONE.value, server_default="none", nullable=False)
     raw_email_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     gmail_thread_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    payment_method: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    cash_box_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("cash_box.id", ondelete="SET NULL"), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False, default="manual", server_default="manual")
     ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
 
     # Database relationships
     attachments: Mapped[List["Attachment"]] = relationship(
@@ -145,3 +148,93 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     receipt: Mapped["Receipt"] = relationship("Receipt", back_populates="attachments")
+
+
+class CashBox(Base):
+    __tablename__ = "cash_box"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    category_variable: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    balance_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    transactions: Mapped[List["CashTransaction"]] = relationship(
+        "CashTransaction", back_populates="cash_box", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class CashTransaction(Base):
+    __tablename__ = "cash_transaction"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    cash_box_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cash_box.id", ondelete="CASCADE"), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    receipt_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("receipts.id", ondelete="SET NULL"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    cash_box: Mapped["CashBox"] = relationship("CashBox", back_populates="transactions")
+
+
+class DuplicateCandidate(Base):
+    """Tracks pairs of receipts that may be duplicates, pending human review."""
+    __tablename__ = "duplicate_candidate"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    receipt_id_a: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False
+    )
+    receipt_id_b: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False
+    )
+    # match_reason: "invoice_number" | "amount_payee_date" | "amount_payee" | "manual"
+    match_reason: Mapped[str] = mapped_column(String(50), nullable=False)
+    # confidence: "high" | "medium" | "low"
+    confidence: Mapped[str] = mapped_column(String(10), nullable=False)
+    # status: "pending_review" | "merged" | "linked" | "dismissed"
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending_review", server_default="pending_review"
+    )
+    merged_into_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("receipts.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    receipt_a: Mapped["Receipt"] = relationship(
+        "Receipt", foreign_keys=[receipt_id_a], lazy="selectin"
+    )
+    receipt_b: Mapped["Receipt"] = relationship(
+        "Receipt", foreign_keys=[receipt_id_b], lazy="selectin"
+    )
+
+    __table_args__ = (
+        Index("idx_dup_candidate_receipt_a", "receipt_id_a"),
+        Index("idx_dup_candidate_receipt_b", "receipt_id_b"),
+        Index("idx_dup_candidate_status", "status"),
+    )
+
+
+class ReimbursementCredit(Base):
+    __tablename__ = "reimbursement_credits"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    original_receipt_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("receipts.id", ondelete="SET NULL"), nullable=True)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    applied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

@@ -375,6 +375,17 @@ export interface ReportReceiptLine {
   created_at: string;
 }
 
+export interface CreditLine {
+  id: string;
+  original_receipt_id: string | null;
+  amount_cents: number;
+  reason: string;
+  notes: string | null;
+  status: string;
+  applied_at: string | null;
+  created_at: string;
+}
+
 export interface UnreimbursedReport {
   filter_by: string | null;
   filter_value: string | null;
@@ -389,6 +400,9 @@ export interface UnreimbursedReport {
   stacked_by_month_payment: Array<Record<string, string | number>>;
   payment_categories: string[];
   receipts: ReportReceiptLine[];
+  credits: CreditLine[];
+  total_credits_cents: number;
+  net_due_cents: number;
 }
 
 export async function getUnreimbursedReport(params: {
@@ -519,5 +533,209 @@ export const normalizeAll = async (): Promise<NormalizeResult> => {
 
 export const listBuiltinRules = async (): Promise<BuiltinRule[]> => {
   const res = await api.get<BuiltinRule[]>("/api/payees/builtin");
+  return res.data;
+};
+
+// ---------------------------------------------------------------------------
+// Petty cash
+// ---------------------------------------------------------------------------
+
+export interface CashBox {
+  id: string;
+  name: string;
+  category_variable: string | null;
+  balance_cents: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CashTransaction {
+  id: string;
+  cash_box_id: string;
+  type: string;
+  amount_cents: number;
+  date: string;
+  description: string | null;
+  receipt_id: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export const listCashBoxes = async (): Promise<CashBox[]> => {
+  const res = await api.get<CashBox[]>("/api/cash-boxes");
+  return res.data;
+};
+
+export const createCashBox = async (data: {
+  name: string;
+  category_variable?: string | null;
+  notes?: string | null;
+}): Promise<CashBox> => {
+  const res = await api.post<CashBox>("/api/cash-boxes", data);
+  return res.data;
+};
+
+export const updateCashBox = async (
+  id: string,
+  data: { name?: string; category_variable?: string | null; notes?: string | null },
+): Promise<CashBox> => {
+  const res = await api.patch<CashBox>(`/api/cash-boxes/${id}`, data);
+  return res.data;
+};
+
+export const deleteCashBox = async (id: string): Promise<void> => {
+  await api.delete(`/api/cash-boxes/${id}`);
+};
+
+export const listCashTransactions = async (boxId: string): Promise<CashTransaction[]> => {
+  const res = await api.get<CashTransaction[]>(`/api/cash-boxes/${boxId}/transactions`);
+  return res.data;
+};
+
+export const createCashTransaction = async (
+  boxId: string,
+  data: {
+    type: string;
+    amount_cents: number;
+    date: string;
+    description?: string | null;
+    receipt_id?: string | null;
+    notes?: string | null;
+  },
+): Promise<CashTransaction> => {
+  const res = await api.post<CashTransaction>(`/api/cash-boxes/${boxId}/transactions`, data);
+  return res.data;
+};
+
+// ---------------------------------------------------------------------------
+// Reimbursement credits
+// ---------------------------------------------------------------------------
+
+export interface ReimbursementCredit {
+  id: string;
+  original_receipt_id: string | null;
+  amount_cents: number;
+  reason: string;
+  notes: string | null;
+  status: string;
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const listCredits = async (status?: string): Promise<ReimbursementCredit[]> => {
+  const res = await api.get<ReimbursementCredit[]>("/api/reimbursement-credits", {
+    params: status ? { status } : {},
+  });
+  return res.data;
+};
+
+export const createCredit = async (data: {
+  original_receipt_id?: string | null;
+  amount_cents: number;
+  reason: string;
+  notes?: string | null;
+}): Promise<ReimbursementCredit> => {
+  const res = await api.post<ReimbursementCredit>("/api/reimbursement-credits", data);
+  return res.data;
+};
+
+export const updateCredit = async (
+  id: string,
+  data: { status?: string; applied_at?: string | null; notes?: string | null },
+): Promise<ReimbursementCredit> => {
+  const res = await api.patch<ReimbursementCredit>(`/api/reimbursement-credits/${id}`, data);
+  return res.data;
+};
+
+export const deleteCredit = async (id: string): Promise<void> => {
+  await api.delete(`/api/reimbursement-credits/${id}`);
+};
+
+// ---------------------------------------------------------------------------
+// Duplicate candidates
+// ---------------------------------------------------------------------------
+
+export interface ReceiptSummary {
+  id: string;
+  payee: string;
+  canonical_payee?: string | null;
+  amount: number;
+  date: string;
+  invoice_number?: string | null;
+  inferred_purpose?: string | null;
+  category_variable: string;
+  source: string;
+  created_at: string;
+}
+
+export interface DuplicateCandidate {
+  id: string;
+  receipt_id_a: string;
+  receipt_id_b: string;
+  match_reason: string;
+  confidence: "high" | "medium" | "low";
+  status: "pending_review" | "merged" | "linked" | "dismissed";
+  merged_into_id?: string | null;
+  reviewed_at?: string | null;
+  notes?: string | null;
+  created_at: string;
+  receipt_a: ReceiptSummary;
+  receipt_b: ReceiptSummary;
+}
+
+export interface LinkedReceipt {
+  candidate_id: string;
+  match_reason: string;
+  reviewed_at?: string | null;
+  receipt: ReceiptSummary;
+}
+
+export const listDuplicateCandidates = async (status?: string): Promise<DuplicateCandidate[]> => {
+  const params = status ? { status } : {};
+  const res = await api.get<DuplicateCandidate[]>("/api/duplicate-candidates", { params });
+  return res.data;
+};
+
+/** Alias with spec-compliant name */
+export const getDuplicateCandidates = listDuplicateCandidates;
+
+export const triggerDuplicateScan = async (): Promise<{ new_candidates: number }> => {
+  const res = await api.post<{ new_candidates: number }>("/api/duplicate-candidates/scan");
+  return res.data;
+};
+
+/** Alias with spec-compliant name */
+export const scanForDuplicates = triggerDuplicateScan;
+
+export const mergeDuplicate = async (
+  id: string,
+  primary_receipt_id: string,
+): Promise<DuplicateCandidate> => {
+  const res = await api.post<DuplicateCandidate>(`/api/duplicate-candidates/${id}/merge`, {
+    primary_receipt_id,
+  });
+  return res.data;
+};
+
+export const linkDuplicate = async (id: string, notes?: string): Promise<DuplicateCandidate> => {
+  const res = await api.post<DuplicateCandidate>(`/api/duplicate-candidates/${id}/link`, notes ? { notes } : {});
+  return res.data;
+};
+
+/** Alias with spec-compliant name */
+export const linkDuplicateCandidate = linkDuplicate;
+
+export const dismissDuplicate = async (id: string, notes?: string): Promise<DuplicateCandidate> => {
+  const res = await api.post<DuplicateCandidate>(`/api/duplicate-candidates/${id}/dismiss`, notes ? { notes } : {});
+  return res.data;
+};
+
+/** Alias with spec-compliant name */
+export const dismissDuplicateCandidate = dismissDuplicate;
+
+export const getLinkedReceipts = async (receiptId: string): Promise<LinkedReceipt[]> => {
+  const res = await api.get<LinkedReceipt[]>(`/api/receipts/${receiptId}/linked`);
   return res.data;
 };

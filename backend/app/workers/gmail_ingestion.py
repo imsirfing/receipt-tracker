@@ -252,6 +252,7 @@ async def _persist_receipt(
         inferred_purpose=extraction.inferred_purpose,
         payment_category=extraction.payment_category,
         payment_detail=extraction.payment_detail,
+        invoice_number=extraction.invoice_number or None,
         category_variable=category,
         recurring_type=recurring,
         raw_email_id=message_id,
@@ -400,6 +401,13 @@ async def process_message(
         extraction=extraction,
         gcs_uris=uploaded,
     )
+
+    # Scan for duplicates against recently-ingested receipts.
+    try:
+        from app.duplicate_scanner import scan_for_duplicates  # local import to avoid cycles
+        await scan_for_duplicates(session, receipt_id=receipt.id)
+    except Exception as exc:  # never block ingestion on scan failure
+        logger.warning("duplicate scan failed for receipt %s: %s", receipt.id, exc)
 
     service.users().messages().modify(
         userId="me", id=message_id, body={"removeLabelIds": ["INBOX", "UNREAD"]}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, FileText, LogOut, MessageSquare, Receipt, RefreshCw, Search, ShieldCheck, Tag } from "lucide-react";
+import { BarChart3, ClipboardList, Copy, FileText, LogOut, MessageSquare, Receipt, RefreshCw, Search, ShieldCheck, Tag, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
-import { triggerIngest, getIngestStatus, listPending, getMe } from "../api";
+import { triggerIngest, getIngestStatus, listPending, getMe, listDuplicateCandidates } from "../api";
 import CommandPalette from "./CommandPalette";
 
 const baseNav = [
@@ -12,6 +12,7 @@ const baseNav = [
   { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false, ownerOnly: false },
   { to: "/reports", label: "Reports", icon: FileText, writeOnly: false, ownerOnly: false },
   { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false, ownerOnly: false },
+  { to: "/cash-boxes", label: "Cash Boxes", icon: Wallet, writeOnly: false, ownerOnly: false },
 ];
 
 export default function Layout() {
@@ -20,6 +21,7 @@ export default function Layout() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [isOwner, setIsOwner] = useState(false);
   const [canWrite, setCanWrite] = useState(true);
 
@@ -28,12 +30,16 @@ export default function Layout() {
     getMe().then(me => {
       setIsOwner(me.is_owner);
       setCanWrite(me.role === "write" || me.is_owner);
+      if (me.is_owner) {
+        listDuplicateCandidates().then(items => setDuplicateCount(items.length)).catch(() => {});
+      }
     }).catch(() => {});
   }, []);
 
   const nav = [
     ...baseNav.filter(item => (!item.writeOnly || canWrite) && (!item.ownerOnly || isOwner)),
     ...(isOwner ? [
+      { to: "/duplicates", label: "Duplicates", icon: Copy, writeOnly: false },
       { to: "/admin/access", label: "Access", icon: ShieldCheck, writeOnly: false },
       { to: "/admin/payees", label: "Payee Rules", icon: Tag, writeOnly: false },
     ] : []),
@@ -131,6 +137,11 @@ export default function Layout() {
                     {pendingCount}
                   </span>
                 )}
+                {label === "Duplicates" && duplicateCount > 0 && (
+                  <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {duplicateCount}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -164,6 +175,11 @@ export default function Layout() {
               {label === "Review" && pendingCount > 0 && (
                 <span className="absolute top-1 right-1/4 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full leading-none">
                   {pendingCount > 9 ? "9+" : pendingCount}
+                </span>
+              )}
+              {label === "Duplicates" && duplicateCount > 0 && (
+                <span className="absolute top-1 right-1/4 bg-amber-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full leading-none">
+                  {duplicateCount > 9 ? "9+" : duplicateCount}
                 </span>
               )}
             </Link>

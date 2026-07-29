@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { fmtCurrency } from "../utils";
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
   PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { listReceipts, Receipt } from "../api";
+import { listReceipts, listCashBoxes, Receipt, CashBox } from "../api";
 import { useUser } from "../user-context";
 
 const CATEGORIES = ["personal", "realestate", "traverse", "edgehill", "trust", "nopa", "uncategorized"];
@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
   const [monthsBack, setMonthsBack] = useState(12);
   const { me, isOwner } = useUser();
 
@@ -48,6 +49,9 @@ export default function Dashboard() {
       .then((data) => setReceipts(data.items))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+    listCashBoxes()
+      .then(setCashBoxes)
+      .catch(() => {}); // non-fatal
   }, []);
 
   const filteredReceipts = useMemo(() => {
@@ -290,6 +294,38 @@ export default function Dashboard() {
           </LineChart>
         </ResponsiveContainer>
       </div>
+
+      {cashBoxes.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm font-medium text-slate-700">Petty Cash</div>
+            <Link to="/cash-boxes" className="text-xs text-indigo-500 hover:underline">Manage →</Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {cashBoxes.map((box) => (
+              <Link
+                key={box.id}
+                to={`/cash-boxes/${box.id}`}
+                className={`p-3 rounded-lg border transition-colors hover:shadow-sm ${
+                  box.balance_cents < 2000
+                    ? "border-amber-200 bg-amber-50 hover:border-amber-400"
+                    : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                }`}
+              >
+                <div className="text-xs text-slate-500 truncate">{box.name}</div>
+                <div className={`text-base font-bold mt-1 tabular-nums ${
+                  box.balance_cents < 2000 ? "text-amber-600" : "text-emerald-600"
+                }`}>
+                  {(box.balance_cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                </div>
+                {box.balance_cents < 2000 && (
+                  <div className="text-[10px] text-amber-500 mt-0.5 font-medium">Low balance</div>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
         <div className="text-sm font-medium text-slate-700 mb-3">Recent receipts</div>

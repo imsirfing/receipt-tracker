@@ -54,6 +54,19 @@ class ReceiptLine(BaseModel):
     created_at: datetime
 
 
+class CreditLine(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    original_receipt_id: Optional[uuid.UUID]
+    amount_cents: int
+    reason: str
+    notes: Optional[str]
+    status: str
+    applied_at: Optional[datetime]
+    created_at: datetime
+
+
 class UnreimbursedReportOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,3 +89,8 @@ class UnreimbursedReportOut(BaseModel):
     payment_categories: List[str]
 
     receipts: List[ReceiptLine]
+
+    # Credits / adjustments
+    credits: List[CreditLine] = []
+    total_credits_cents: int = 0
+    net_due_cents: float = 0.0

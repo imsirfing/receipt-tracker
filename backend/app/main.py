@@ -143,6 +143,9 @@ from app.routes.reports import router as reports_router  # noqa: E402
 from app.routes.report_pdf import router as report_pdf_router  # noqa: E402
 from app.routes.payees import router as payees_router  # noqa: E402
 from app.routes.privacy import router as privacy_router  # noqa: E402
+from app.routes.cash import router as cash_router  # noqa: E402
+from app.routes.credits import router as credits_router  # noqa: E402
+from app.routes.duplicates import router as duplicates_router  # noqa: E402
 
 app.include_router(receipts_router)
 app.include_router(chat_router)
@@ -153,3 +156,6 @@ app.include_router(reports_router)
 app.include_router(report_pdf_router)
 app.include_router(payees_router)
 app.include_router(privacy_router)
+app.include_router(cash_router)
+app.include_router(credits_router)
+app.include_router(duplicates_router)
