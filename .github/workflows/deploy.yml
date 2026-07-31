@@ -80,6 +80,8 @@ jobs:
         gcloud run jobs update alembic-migrate \
           --image gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} \
           --region $REGION \
+          --command alembic \
+          --args upgrade,head \
           --set-cloudsql-instances $CLOUDSQL_INSTANCE \
           --env-vars-file /tmp/env-vars.yaml || \
         gcloud run jobs create alembic-migrate \
