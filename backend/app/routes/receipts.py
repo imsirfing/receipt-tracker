@@ -31,7 +31,7 @@ from google.cloud import storage as gcs_storage
 from app.auth import get_current_user
 from app.db import get_session
 from app.models.pending_email import PendingEmail
-from app.models.receipt import Attachment, Receipt, ReceiptAuditLog, RecurringType
+from app.models.receipt import Attachment, CashTransaction, Receipt, ReceiptAuditLog, RecurringType
 from app.services.payee_normalizer import normalize_payee
 from app.workers.gmail_ingestion import screenshot_gmail_message
 
@@ -292,6 +292,11 @@ async def update_receipt(
 
     snapshot_before = receipt.to_audit_dict()
     changes = patch.model_dump(exclude_unset=True)
+
+    # Track cash_box_id transition before applying changes
+    old_cash_box_id = receipt.cash_box_id
+    new_cash_box_id = changes.get("cash_box_id", old_cash_box_id)
+
     changed_fields = []
     for field, value in changes.items():
         if getattr(receipt, field, None) != value:
@@ -308,6 +313,31 @@ async def update_receipt(
             snapshot_after=receipt.to_audit_dict(),
             edit_reason=edit_reason,
         ))
+
+    # Auto-manage CashTransaction when cash_box_id changes
+    if "cash_box_id" in changes:
+        # Remove any existing auto-created transaction for this receipt
+        existing_txn_result = await session.execute(
+            select(CashTransaction).where(CashTransaction.receipt_id == receipt_id)
+        )
+        existing_txn = existing_txn_result.scalar_one_or_none()
+        if existing_txn:
+            await session.delete(existing_txn)
+
+        # Create a new transaction if a cash box is being assigned
+        if new_cash_box_id is not None:
+            amount_cents = round(receipt.amount * 100)
+            new_txn = CashTransaction(
+                id=uuid.uuid4(),
+                cash_box_id=new_cash_box_id,
+                type="expense",
+                amount_cents=amount_cents,
+                date=receipt.date,
+                description=receipt.payee,
+                receipt_id=receipt.id,
+                notes=None,
+            )
+            session.add(new_txn)
 
     await session.commit()
     await session.refresh(receipt)
