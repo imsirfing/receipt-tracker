@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, PlusCircle, Scale } from "lucide-react";
+import { ArrowLeft, PlusCircle, Scale, Trash2 } from "lucide-react";
 import {
   listCashBoxes,
   listCashTransactions,
   createCashTransaction,
+  deleteCashTransaction,
   CashBox,
   CashTransaction,
 } from "../api";
@@ -42,6 +43,7 @@ export default function CashBoxDetail() {
   const [reconcileAmt, setReconcileAmt] = useState("");
   const [reconcileNotes, setReconcileNotes] = useState("");
   const [savingReconcile, setSavingReconcile] = useState(false);
+  const [deletingTxnId, setDeletingTxnId] = useState<string | null>(null);
 
   const computeBalance = (txns: CashTransaction[]) => {
     let bal = 0;
@@ -92,6 +94,21 @@ export default function CashBoxDetail() {
       toast.error(String(e));
     } finally {
       setSavingExp(false);
+    }
+  };
+
+  const handleDeleteTransaction = async (txnId: string) => {
+    if (!id) return;
+    if (!window.confirm("Delete this transaction? This cannot be undone.")) return;
+    setDeletingTxnId(txnId);
+    try {
+      await deleteCashTransaction(id, txnId);
+      toast.success("Transaction deleted");
+      load();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setDeletingTxnId(null);
     }
   };
 
@@ -182,6 +199,7 @@ export default function CashBoxDetail() {
                 <th className="text-left px-4 py-3">Type</th>
                 <th className="text-left px-4 py-3">Description</th>
                 <th className="text-right px-4 py-3">Amount</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -202,6 +220,16 @@ export default function CashBoxDetail() {
                         Receipt ↗
                       </Link>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => handleDeleteTransaction(t.id)}
+                      disabled={deletingTxnId === t.id}
+                      className="text-slate-300 hover:text-red-500 disabled:opacity-30 transition-colors"
+                      title="Delete transaction"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </td>
                   <td className={`px-4 py-3 text-right font-semibold tabular-nums ${
                     t.type === "replenishment" || t.type === "adjustment"

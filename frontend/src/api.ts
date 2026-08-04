@@ -593,6 +593,10 @@ export const listCashTransactions = async (boxId: string): Promise<CashTransacti
   return res.data;
 };
 
+export const deleteCashTransaction = async (boxId: string, txnId: string): Promise<void> => {
+  await api.delete(`/api/cash-boxes/${boxId}/transactions/${txnId}`);
+};
+
 export const createCashTransaction = async (
   boxId: string,
   data: {

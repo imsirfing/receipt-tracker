@@ -252,3 +252,26 @@ async def create_transaction(
     await session.commit()
     await session.refresh(txn)
     return txn
+
+
+@router.delete("/{box_id}/transactions/{txn_id}", status_code=204)
+async def delete_transaction(
+    box_id: uuid.UUID,
+    txn_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user["role"] != "write":
+        raise HTTPException(status_code=403, detail="Write access required")
+    await _get_box(box_id, session)
+    result = await session.execute(
+        select(CashTransaction).where(
+            CashTransaction.id == txn_id,
+            CashTransaction.cash_box_id == box_id,
+        )
+    )
+    txn = result.scalar_one_or_none()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    await session.delete(txn)
+    await session.commit()

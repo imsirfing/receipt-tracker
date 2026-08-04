@@ -44,6 +44,8 @@ class ReceiptOut(BaseModel):
     notes: Optional[str] = None
     is_tax_deductible: bool = False
     reimbursement_owner: Optional[str] = None
+    payment_method: Optional[str] = None
+    cash_box_id: Optional[uuid.UUID] = None
     raw_email_id: str
     gmail_thread_id: Optional[str] = None
     source: str = "manual"
@@ -89,6 +91,8 @@ class ReceiptUpdate(BaseModel):
     payment_category: Optional[str] = None
     payment_detail: Optional[str] = None
     recurring_type: Optional[str] = None
+    payment_method: Optional[str] = None
+    cash_box_id: Optional[uuid.UUID] = None
 
 
 class BulkSetReimbursementStatusRequest(BaseModel):
