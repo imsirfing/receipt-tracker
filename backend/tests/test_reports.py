@@ -224,11 +224,12 @@ async def test_reports_endpoint_payment_categories_populated(app_with_overrides)
 @pytest.mark.asyncio
 async def test_reports_endpoint_filter_by_category(app_with_overrides, mock_db_session, sample_receipts):
     """filter_by=category&filter_value=personal returns only personal receipts."""
-    # Return only the personal receipt
+    # Return only the personal receipt for the main query; empty list for credits
     personal_only = [r for r in sample_receipts if r.category_variable == "personal"]
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = personal_only
-    mock_db_session.execute.return_value = result
+    receipts_result = MagicMock()
+    receipts_result.scalars.return_value.all.return_value = personal_only
+    from tests.conftest import _make_empty_result
+    mock_db_session.execute.side_effect = [receipts_result, _make_empty_result()]
 
     async with AsyncClient(
         transport=ASGITransport(app=app_with_overrides), base_url="http://test"
@@ -247,9 +248,9 @@ async def test_reports_endpoint_filter_by_category(app_with_overrides, mock_db_s
 @pytest.mark.asyncio
 async def test_reports_endpoint_empty_returns_zero_summary(app_with_overrides, mock_db_session):
     """When no receipts match, summary fields should be zero/null."""
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = []
-    mock_db_session.execute.return_value = result
+    from tests.conftest import _make_empty_result
+    # Both the receipts query and the credits query should return empty lists.
+    mock_db_session.execute.side_effect = [_make_empty_result(), _make_empty_result()]
 
     async with AsyncClient(
         transport=ASGITransport(app=app_with_overrides), base_url="http://test"

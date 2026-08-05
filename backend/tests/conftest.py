@@ -91,11 +91,21 @@ def sample_receipts():
     ]
 
 
+def _make_empty_result() -> MagicMock:
+    """Return a mock execute result that yields an empty list."""
+    r = MagicMock()
+    r.scalars.return_value.all.return_value = []
+    return r
+
+
 @pytest.fixture
 def mock_db_session(sample_receipts):
-    """AsyncSession mock that returns sample_receipts on execute()."""
+    """AsyncSession mock that returns sample_receipts on the first execute()
+    call (the main receipts query) and an empty result on subsequent calls
+    (e.g. the ReimbursementCredit credits query)."""
     session = AsyncMock()
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = sample_receipts
-    session.execute.return_value = result
+    receipts_result = MagicMock()
+    receipts_result.scalars.return_value.all.return_value = sample_receipts
+    # side_effect list: call 1 → receipts, call 2+ → empty (credits, etc.)
+    session.execute.side_effect = [receipts_result, _make_empty_result()]
     return session

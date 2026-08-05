@@ -306,6 +306,26 @@ async def update_receipt(
         if getattr(receipt, field, None) != value:
             changed_fields.append(field)
         setattr(receipt, field, value)
+
+    # Keep is_reimbursed and reimbursement_status in sync so they never drift.
+    # reimbursement_status is the authority; is_reimbursed is the derived bool.
+    if "reimbursement_status" in changes:
+        synced = receipt.reimbursement_status == "reimbursed"
+        if receipt.is_reimbursed != synced:
+            receipt.is_reimbursed = synced
+            if "is_reimbursed" not in changed_fields:
+                changed_fields.append("is_reimbursed")
+    elif "is_reimbursed" in changes:
+        # Caller set the bool without setting the status string — upgrade it.
+        if receipt.is_reimbursed and receipt.reimbursement_status in ("none", None):
+            receipt.reimbursement_status = "reimbursed"
+            if "reimbursement_status" not in changed_fields:
+                changed_fields.append("reimbursement_status")
+        elif not receipt.is_reimbursed and receipt.reimbursement_status == "reimbursed":
+            receipt.reimbursement_status = "none"
+            if "reimbursement_status" not in changed_fields:
+                changed_fields.append("reimbursement_status")
+
     receipt.updated_at = datetime.now(timezone.utc)
 
     if changed_fields:
