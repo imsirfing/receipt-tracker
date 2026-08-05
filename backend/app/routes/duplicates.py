@@ -9,7 +9,7 @@ POST /api/duplicate-candidates/{id}/dismiss     — dismiss the candidate
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date as _Date, datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -37,7 +37,7 @@ class ReceiptSummary(BaseModel):
     payee: str
     canonical_payee: Optional[str] = None
     amount: float
-    date: str
+    date: _Date
     invoice_number: Optional[str] = None
     inferred_purpose: Optional[str] = None
     category_variable: str
