@@ -24,6 +24,7 @@ const categoryColor = (cat: string) => CATEGORY_COLORS[cat] ?? "#94a3b8";
 
 export default function Dashboard() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [totalAmountAllTime, setTotalAmountAllTime] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cashBoxes, setCashBoxes] = useState<CashBox[]>([]);
@@ -45,8 +46,11 @@ export default function Dashboard() {
   }, [singleCategory, allowedCategories]);
 
   useEffect(() => {
-    listReceipts()
-      .then((data) => setReceipts(data.items))
+    listReceipts(500)
+      .then((data) => {
+        setReceipts(data.items);
+        setTotalAmountAllTime(data.total_amount);
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
     listCashBoxes()
@@ -100,7 +104,11 @@ export default function Dashboard() {
       .slice(0, 8);
   }, [filteredReceipts]);
 
-  const totalSpend = filteredReceipts.reduce((s, r) => s + Number(r.amount), 0);
+  // Use server-computed total when no filters are active (avoids pagination truncation)
+  const clientTotalSpend = filteredReceipts.reduce((s, r) => s + Number(r.amount), 0);
+  const totalSpend = (monthsBack === 9999 && selectedCategory === "all" && totalAmountAllTime !== null)
+    ? totalAmountAllTime
+    : clientTotalSpend;
   const unreimbursed = filteredReceipts
     .filter((r) => r.reimbursement_status === "none")
     .reduce((s, r) => s + Number(r.amount), 0);

@@ -58,6 +58,7 @@ class ReceiptOut(BaseModel):
 class ReceiptListOut(BaseModel):
     items: List[ReceiptOut]
     total: int
+    total_amount: float
     limit: int
     offset: int
 

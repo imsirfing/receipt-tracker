@@ -110,6 +110,7 @@ export interface AuditEntry {
 export interface ReceiptListResponse {
   items: Receipt[];
   total: number;
+  total_amount: number;
   limit: number;
   offset: number;
 }

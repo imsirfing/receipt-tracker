@@ -121,10 +121,14 @@ async def list_receipts(
     count_result = await session.execute(count_stmt)
     total = count_result.scalar()
 
+    amount_stmt = select(func.coalesce(func.sum(Receipt.amount), 0)).select_from(stmt.subquery())
+    amount_result = await session.execute(amount_stmt)
+    total_amount = float(amount_result.scalar() or 0)
+
     stmt = stmt.order_by(Receipt.date.desc()).limit(limit).offset(offset)
     result = await session.execute(stmt)
     receipts = [ReceiptOut.model_validate(r) for r in result.scalars().all()]
-    return ReceiptListOut(items=receipts, total=total, limit=limit, offset=offset)
+    return ReceiptListOut(items=receipts, total=total, total_amount=total_amount, limit=limit, offset=offset)
 
 
 @router.get("/export")
