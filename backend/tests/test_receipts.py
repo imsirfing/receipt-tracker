@@ -43,6 +43,9 @@ def make_receipt_orm_mock(**overrides) -> MagicMock:
         reimbursement_note=None,
         reimbursement_status="none",
         raw_email_id=f"manual-{uuid.uuid4()}",
+        gmail_thread_id=None,
+        payment_method=None,
+        cash_box_id=None,
         source="manual",
         ingested_at=None,
         created_at=datetime.now(timezone.utc),
@@ -105,13 +108,17 @@ def mock_db_session_receipts(single_receipt):
     count_result = MagicMock()
     count_result.scalar.return_value = 1
 
+    # total_amount aggregate query
+    amount_result = MagicMock()
+    amount_result.scalar.return_value = 99.99
+
     # single-item query: scalar_one_or_none()
     single_result = MagicMock()
     single_result.scalar_one_or_none.return_value = single_receipt
     single_result.scalars.return_value.all.return_value = [single_receipt]
 
-    # Return count_result first (for list endpoint), then single_result for others
-    session.execute.side_effect = [count_result, list_result]
+    # Return count_result, amount_result, list_result for list endpoint
+    session.execute.side_effect = [count_result, amount_result, list_result]
 
     return session, single_receipt
 
@@ -196,6 +203,7 @@ async def test_list_receipts_returns_200(app_with_overrides):
     data = r.json()
     assert "items" in data
     assert "total" in data
+    assert "total_amount" in data
 
 
 @pytest.mark.integration
@@ -222,9 +230,11 @@ async def test_list_receipts_read_user_allowed(app_with_overrides, read_user):
     # Re-set session side_effect for list query
     count_result = MagicMock()
     count_result.scalar.return_value = 0
+    amount_result = MagicMock()
+    amount_result.scalar.return_value = 0.0
     list_result = MagicMock()
     list_result.scalars.return_value.all.return_value = []
-    session.execute.side_effect = [count_result, list_result]
+    session.execute.side_effect = [count_result, amount_result, list_result]
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/api/receipts")

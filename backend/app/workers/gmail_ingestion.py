@@ -321,11 +321,8 @@ async def process_message(
     message_meta: dict,
 ) -> Optional[Receipt]:
     message_id = message_meta["id"]
-    msg = (
-        service.users()
-        .messages()
-        .get(userId="me", id=message_id, format="full")
-        .execute()
+    msg = await asyncio.to_thread(
+        lambda: service.users().messages().get(userId="me", id=message_id, format="full").execute()
     )
     thread_id: Optional[str] = msg.get("threadId") or message_id
     payload = msg.get("payload", {})
@@ -363,12 +360,12 @@ async def process_message(
     _raw_body = _extract_body_text(payload)
     _stripped_body = _re.sub(r'<https?://\S+>', '', _raw_body)
     body_text = _stripped_body[:15_000]
-    blobs = _collect_attachments(service, message_id, payload)
+    blobs = await asyncio.to_thread(lambda: _collect_attachments(service, message_id, payload))
     attachment_pairs = [(b.data, b.mime_type) for b in blobs]
 
     try:
-        extraction = parser.extract_from_email(
-            subject, body_text, attachments=attachment_pairs or None
+        extraction = await asyncio.to_thread(
+            lambda: parser.extract_from_email(subject, body_text, attachments=attachment_pairs or None)
         )
     except NotAReceiptError as exc:
         logger.info("message %s is not a receipt (%s), storing for review", message_id, exc.reason)
@@ -382,15 +379,17 @@ async def process_message(
             skip_reason=exc.reason,
             received_date=received_date,
         )
-        service.users().messages().modify(
-            userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
-        ).execute()
+        await asyncio.to_thread(
+            lambda: service.users().messages().modify(
+                userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
+            ).execute()
+        )
         return None
 
     # Only upload to GCS after confirming it's a real receipt
     uploaded: List[tuple[str, str, Optional[str]]] = []
     for blob in blobs:
-        gcs_uri = _upload_to_gcs(bucket, category, message_id, blob)
+        gcs_uri = await asyncio.to_thread(lambda b=blob: _upload_to_gcs(bucket, category, message_id, b))
         uploaded.append((gcs_uri, blob.mime_type, blob.filename or None))
 
     receipt = await _persist_receipt(
@@ -409,9 +408,11 @@ async def process_message(
     except Exception as exc:  # never block ingestion on scan failure
         logger.warning("duplicate scan failed for receipt %s: %s", receipt.id, exc)
 
-    service.users().messages().modify(
-        userId="me", id=message_id, body={"removeLabelIds": ["INBOX", "UNREAD"]}
-    ).execute()
+    await asyncio.to_thread(
+        lambda: service.users().messages().modify(
+            userId="me", id=message_id, body={"removeLabelIds": ["INBOX", "UNREAD"]}
+        ).execute()
+    )
 
     return receipt
 
@@ -434,66 +435,81 @@ async def poll_inbox_once() -> int:
         kwargs: dict = {"userId": "me", "q": query, "maxResults": 500}
         if page_token:
             kwargs["pageToken"] = page_token
-        listing = service.users().messages().list(**kwargs).execute()
+        listing = await asyncio.to_thread(
+            lambda kw=kwargs: service.users().messages().list(**kw).execute()
+        )
         messages.extend(listing.get("messages", []))
         page_token = listing.get("nextPageToken")
         if not page_token:
             break
 
-    processed = 0
-    async with AsyncSessionLocal() as session:
-        # Batch-load all known IDs upfront — one query each, then in-memory lookups.
-        # This avoids N DB round-trips (and N LLM calls) for already-processed messages.
-        receipt_rows = await session.execute(select(Receipt.raw_email_id))
+    # Batch-load all known IDs upfront in a short-lived session — avoids N LLM calls for
+    # already-processed messages.  Each new message then gets its own session for safe
+    # concurrent processing.
+    async with AsyncSessionLocal() as id_session:
+        receipt_rows = await id_session.execute(select(Receipt.raw_email_id))
         known_receipt_ids: set[str] = {r[0] for r in receipt_rows if r[0]}
-
-        pending_rows = await session.execute(select(PendingEmail.gmail_message_id))
+        pending_rows = await id_session.execute(select(PendingEmail.gmail_message_id))
         known_pending_ids: set[str] = {r[0] for r in pending_rows if r[0]}
 
-        logger.info(
-            "inbox: %d messages | already ingested: %d receipts + %d pending/tombstoned — processing %d new",
-            len(messages),
-            len(known_receipt_ids),
-            len(known_pending_ids),
-            len([m for m in messages if m.get("id") not in known_receipt_ids and m.get("id") not in known_pending_ids]),
-        )
+    new_messages = [
+        m for m in messages
+        if m.get("id") not in known_receipt_ids and m.get("id") not in known_pending_ids
+    ]
 
-        for meta in messages:
-            msg_id = meta.get("id", "")
-            if msg_id in known_receipt_ids or msg_id in known_pending_ids:
-                continue
-            try:
-                if await process_message(service, bucket, parser, session, meta):
-                    processed += 1
-            except Exception as exc:
-                logger.exception("failed to process message %s", msg_id)
-                # Fetch real subject/from for the tombstone so it's reviewable
-                subject = "(parse error)"
-                from_address = ""
+    logger.info(
+        "inbox: %d messages | already ingested: %d receipts + %d pending/tombstoned — processing %d new",
+        len(messages),
+        len(known_receipt_ids),
+        len(known_pending_ids),
+        len(new_messages),
+    )
+
+    if not new_messages:
+        return 0
+
+    # Process up to 4 messages concurrently — the LLM calls are the bottleneck and
+    # each is independent, so parallelism cuts wall time from N×5s to ~5s for a batch.
+    sem = asyncio.Semaphore(4)
+
+    async def _process_one(meta: dict) -> Optional[Receipt]:
+        msg_id = meta.get("id", "")
+        async with sem:
+            async with AsyncSessionLocal() as session:
                 try:
-                    msg_meta = service.users().messages().get(
-                        userId="me", messageId=msg_id, format="metadata",
-                        metadataHeaders=["Subject", "From"]
-                    ).execute()
-                    headers = msg_meta.get("payload", {}).get("headers", [])
-                    subject = _extract_header(headers, "Subject") or "(parse error)"
-                    from_address = _extract_header(headers, "From") or ""
-                except Exception:
-                    logger.warning("could not fetch headers for tombstone %s", msg_id)
-                try:
-                    await _persist_pending_email(
-                        session,
-                        message_id=msg_id,
-                        subject=subject,
-                        from_address=from_address,
-                        body_preview="",
-                        category="uncategorized",
-                        skip_reason=f"parse error: {exc}",
-                    )
-                    known_pending_ids.add(msg_id)  # prevent duplicate tombstones in same run
-                except Exception:
-                    logger.exception("failed to tombstone message %s", msg_id)
-    return processed
+                    return await process_message(service, bucket, parser, session, meta)
+                except Exception as exc:
+                    logger.exception("failed to process message %s", msg_id)
+                    subject = "(parse error)"
+                    from_address = ""
+                    try:
+                        msg_meta = await asyncio.to_thread(
+                            lambda: service.users().messages().get(
+                                userId="me", id=msg_id, format="metadata",
+                                metadataHeaders=["Subject", "From"]
+                            ).execute()
+                        )
+                        headers = msg_meta.get("payload", {}).get("headers", [])
+                        subject = _extract_header(headers, "Subject") or "(parse error)"
+                        from_address = _extract_header(headers, "From") or ""
+                    except Exception:
+                        logger.warning("could not fetch headers for tombstone %s", msg_id)
+                    try:
+                        await _persist_pending_email(
+                            session,
+                            message_id=msg_id,
+                            subject=subject,
+                            from_address=from_address,
+                            body_preview="",
+                            category="uncategorized",
+                            skip_reason=f"parse error: {exc}",
+                        )
+                    except Exception:
+                        logger.exception("failed to tombstone message %s", msg_id)
+                    return None
+
+    results = await asyncio.gather(*[_process_one(m) for m in new_messages])
+    return sum(1 for r in results if r is not None)
 
 
 def main() -> None:
