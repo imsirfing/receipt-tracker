@@ -103,9 +103,40 @@ async def scan_for_duplicates(
             )
             new_count += 1
 
-    if new_count:
+    # Retro-fix: dismiss any existing medium-confidence amount_payee_date
+    # candidates where both receipts are recurring and dates are 8-30 days apart.
+    # These are back-to-back monthly charges, not duplicates.
+    stale = await db.execute(
+        select(DuplicateCandidate).where(
+            DuplicateCandidate.match_reason == "amount_payee_date",
+            DuplicateCandidate.confidence == "medium",
+            DuplicateCandidate.status == "pending_review",
+        )
+    )
+    dismissed_count = 0
+    for cand in stale.scalars().all():
+        ra_result = await db.execute(select(Receipt).where(Receipt.id == cand.receipt_id_a))
+        rb_result = await db.execute(select(Receipt).where(Receipt.id == cand.receipt_id_b))
+        ra = ra_result.scalar_one_or_none()
+        rb = rb_result.scalar_one_or_none()
+        if ra is None or rb is None:
+            continue
+        if (
+            getattr(ra, "recurring_type", None) == "ongoing"
+            and getattr(rb, "recurring_type", None) == "ongoing"
+            and 7 < _date_delta(ra, rb) <= 30
+        ):
+            cand.status = "dismissed"
+            cand.notes = "auto-dismissed: recurring monthly charges are not duplicates"
+            cand.reviewed_at = datetime.now(timezone.utc)
+            dismissed_count += 1
+
+    if new_count or dismissed_count:
         await db.commit()
-        logger.info("duplicate_scanner: created %d new candidate(s)", new_count)
+        logger.info(
+            "duplicate_scanner: created %d new candidate(s), auto-dismissed %d recurring false positives",
+            new_count, dismissed_count,
+        )
 
     return new_count
 
@@ -154,9 +185,15 @@ def _classify_pair(
 
         # Same canonical payee
         if canonical_a and canonical_b and canonical_a == canonical_b:
+            both_recurring = (
+                getattr(a, "recurring_type", None) == "ongoing"
+                and getattr(b, "recurring_type", None) == "ongoing"
+            )
             if days <= 7:
                 return "amount_payee_date", "high"
-            if days <= 30:
+            # Skip the 30-day medium band for recurring charges — back-to-back
+            # monthly payments are expected, not duplicates.
+            if days <= 30 and not both_recurring:
                 return "amount_payee_date", "medium"
 
         # Same raw (non-canonical) payee within 7 days
