@@ -484,9 +484,12 @@ async def poll_inbox_once() -> int:
         async with sem:
             last_exc: Optional[Exception] = None
             for attempt in range(MAX_ATTEMPTS):
+                # Build a fresh per-message Gmail service so each concurrent thread
+                # has its own httplib2.Http instance (httplib2 is NOT thread-safe).
+                msg_service = _build_gmail_service()
                 async with AsyncSessionLocal() as session:
                     try:
-                        return await process_message(service, bucket, parser, session, meta)
+                        return await process_message(msg_service, bucket, parser, session, meta)
                     except _TRANSIENT as exc:
                         last_exc = exc
                         if attempt < MAX_ATTEMPTS - 1:
@@ -510,8 +513,9 @@ async def poll_inbox_once() -> int:
             from_address = ""
             async with AsyncSessionLocal() as session:
                 try:
+                    tombstone_service = _build_gmail_service()
                     msg_meta = await asyncio.to_thread(
-                        lambda: service.users().messages().get(
+                        lambda: tombstone_service.users().messages().get(
                             userId="me", id=msg_id, format="metadata",
                             metadataHeaders=["Subject", "From"]
                         ).execute()
