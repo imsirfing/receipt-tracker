@@ -473,40 +473,67 @@ async def poll_inbox_once() -> int:
     sem = asyncio.Semaphore(4)
 
     async def _process_one(meta: dict) -> Optional[Receipt]:
+        import ssl
+        import socket
+
+        # Errors that are transient network blips — retry before tombstoning.
+        _TRANSIENT = (TimeoutError, ssl.SSLError, socket.timeout, ConnectionResetError, ConnectionAbortedError)
+        MAX_ATTEMPTS = 3
+
         msg_id = meta.get("id", "")
         async with sem:
+            last_exc: Optional[Exception] = None
+            for attempt in range(MAX_ATTEMPTS):
+                async with AsyncSessionLocal() as session:
+                    try:
+                        return await process_message(service, bucket, parser, session, meta)
+                    except _TRANSIENT as exc:
+                        last_exc = exc
+                        if attempt < MAX_ATTEMPTS - 1:
+                            wait = 2 ** attempt  # 1s, 2s
+                            logger.warning(
+                                "transient network error on message %s (attempt %d/%d), retrying in %ds: %s",
+                                msg_id, attempt + 1, MAX_ATTEMPTS, wait, exc,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                        # All retries exhausted — fall through to tombstone
+                        logger.exception("transient error persisted after %d attempts for %s", MAX_ATTEMPTS, msg_id)
+                    except Exception as exc:
+                        last_exc = exc
+                        logger.exception("failed to process message %s", msg_id)
+                        break  # Non-transient — tombstone immediately
+
+            # Tombstone the message after all retries failed
+            exc = last_exc
+            subject = "(parse error)"
+            from_address = ""
             async with AsyncSessionLocal() as session:
                 try:
-                    return await process_message(service, bucket, parser, session, meta)
-                except Exception as exc:
-                    logger.exception("failed to process message %s", msg_id)
-                    subject = "(parse error)"
-                    from_address = ""
-                    try:
-                        msg_meta = await asyncio.to_thread(
-                            lambda: service.users().messages().get(
-                                userId="me", id=msg_id, format="metadata",
-                                metadataHeaders=["Subject", "From"]
-                            ).execute()
-                        )
-                        headers = msg_meta.get("payload", {}).get("headers", [])
-                        subject = _extract_header(headers, "Subject") or "(parse error)"
-                        from_address = _extract_header(headers, "From") or ""
-                    except Exception:
-                        logger.warning("could not fetch headers for tombstone %s", msg_id)
-                    try:
-                        await _persist_pending_email(
-                            session,
-                            message_id=msg_id,
-                            subject=subject,
-                            from_address=from_address,
-                            body_preview="",
-                            category="uncategorized",
-                            skip_reason=f"parse error: {exc}",
-                        )
-                    except Exception:
-                        logger.exception("failed to tombstone message %s", msg_id)
-                    return None
+                    msg_meta = await asyncio.to_thread(
+                        lambda: service.users().messages().get(
+                            userId="me", id=msg_id, format="metadata",
+                            metadataHeaders=["Subject", "From"]
+                        ).execute()
+                    )
+                    headers = msg_meta.get("payload", {}).get("headers", [])
+                    subject = _extract_header(headers, "Subject") or "(parse error)"
+                    from_address = _extract_header(headers, "From") or ""
+                except Exception:
+                    logger.warning("could not fetch headers for tombstone %s", msg_id)
+                try:
+                    await _persist_pending_email(
+                        session,
+                        message_id=msg_id,
+                        subject=subject,
+                        from_address=from_address,
+                        body_preview="",
+                        category="uncategorized",
+                        skip_reason=f"parse error: {exc}",
+                    )
+                except Exception:
+                    logger.exception("failed to tombstone message %s", msg_id)
+            return None
 
     results = await asyncio.gather(*[_process_one(m) for m in new_messages])
     return sum(1 for r in results if r is not None)

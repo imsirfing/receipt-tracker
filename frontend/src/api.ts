@@ -260,6 +260,10 @@ export const dismissPending = async (id: string): Promise<void> => {
   await api.delete(`/api/pending/${id}`);
 };
 
+export const requeuePending = async (id: string): Promise<void> => {
+  await api.post(`/api/pending/${id}/requeue`);
+};;
+
 export const convertPending = async (id: string, body: ConvertRequest): Promise<Receipt> => {
   const res = await api.post<Receipt>(`/api/pending/${id}/convert`, body);
   return res.data;

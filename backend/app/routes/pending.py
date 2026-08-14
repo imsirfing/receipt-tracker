@@ -84,6 +84,27 @@ async def list_pending(
     return PendingListOut(items=items, total=total, limit=limit, offset=offset)
 
 
+@router.post("/{pending_id}/requeue", status_code=status.HTTP_204_NO_CONTENT)
+async def requeue_pending(
+    pending_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete the parse-error tombstone so the next inbox sync retries the email.
+    Does NOT archive the Gmail message (unlike dismiss), so it stays in the inbox
+    and will be picked up on the next poll."""
+    if not current_user["is_owner"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    result = await session.execute(
+        select(PendingEmail).where(PendingEmail.id == pending_id)
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="pending email not found")
+    await session.delete(row)
+    await session.commit()
+
+
 @router.delete("/{pending_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def dismiss_pending(
     pending_id: uuid.UUID,

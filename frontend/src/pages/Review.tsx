@@ -8,6 +8,7 @@ import {
   listPending,
   dismissPending,
   convertPending,
+  requeuePending,
 } from "../api";
 
 const PAGE_SIZE = 20;
@@ -92,6 +93,11 @@ export default function ReviewPage() {
 
   const handleDismiss = async (id: string) => {
     await dismissPending(id);
+    setItems((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleRequeue = async (id: string) => {
+    await requeuePending(id);
     setItems((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -183,13 +189,21 @@ export default function ReviewPage() {
       )}
 
       <div className="mt-4 flex gap-2">
-        {canWrite && (
+        {canWrite && !isParseError && (
           <button
               onClick={() => openModal(item)}
               className="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
             >
               Create Receipt
             </button>
+        )}
+        {canWrite && isParseError && (
+          <button
+            onClick={() => handleRequeue(item.id)}
+            className="px-3 py-1.5 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+          >
+            Retry
+          </button>
         )}
         {canWrite && (
           <button
