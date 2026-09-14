@@ -164,16 +164,14 @@ async def create_session(
     db: AsyncSession = Depends(get_session),
     _user: Any = Depends(get_current_user),
 ):
-    # Find receipts in category that are unreimbursed and not deleted
+    # Find all non-deleted receipts in this category (regardless of reimbursement status)
     result = await db.execute(
         select(
             func.min(Receipt.date).label("date_from"),
             func.max(Receipt.date).label("date_to"),
             func.count(Receipt.id).label("receipt_count"),
-            func.sum(func.cast(Receipt.amount * 100, type_=func.Integer())).label("total_cents"),
         ).where(
             Receipt.category_variable == body.category_variable,
-            Receipt.is_reimbursed == False,  # noqa: E712
             Receipt.deleted_at.is_(None),
         )
     )
@@ -182,14 +180,13 @@ async def create_session(
     if row.receipt_count == 0 or row.date_from is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No unreimbursed receipts found for category '{body.category_variable}'",
+            detail=f"No receipts found for category '{body.category_variable}'",
         )
 
-    # Compute total_amount_cents more accurately
+    # Compute total_amount_cents
     amount_result = await db.execute(
         select(Receipt.amount).where(
             Receipt.category_variable == body.category_variable,
-            Receipt.is_reimbursed == False,  # noqa: E712
             Receipt.deleted_at.is_(None),
         )
     )

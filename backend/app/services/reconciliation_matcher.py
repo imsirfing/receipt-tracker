@@ -103,7 +103,6 @@ def run_matching(session_id: uuid.UUID, db: Session) -> List[ReconciliationMatch
         db.execute(
             select(Receipt).where(
                 Receipt.category_variable == recon_session.category_variable,
-                Receipt.is_reimbursed == False,  # noqa: E712
                 Receipt.deleted_at.is_(None),
                 Receipt.date >= recon_session.date_from,
                 Receipt.date <= recon_session.date_to,
