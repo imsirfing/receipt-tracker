@@ -21,7 +21,7 @@ from app.models.receipt import (
 from app.services.reconciliation_matcher import run_matching
 from app.services.statement_parser import StatementParser
 
-router = APIRouter(prefix="/reconciliation", tags=["reconciliation"])
+router = APIRouter(prefix="/api/reconciliation", tags=["reconciliation"])
 
 
 # ── Pydantic schemas ──────────────────────────────────────────────────────────
