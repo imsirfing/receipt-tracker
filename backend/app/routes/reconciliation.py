@@ -306,6 +306,10 @@ async def upload_statement(
         db.add(txn)
 
     await db.flush()
+    # Expunge all loaded ORM objects before handing the session to the sync matcher.
+    # This prevents "Instance has been deleted" errors when the matcher issues a
+    # bulk DELETE and then the outer async session tries to reconcile stale state.
+    await db.run_sync(lambda s: s.expunge_all())
 
     # Run matching via run_sync so we can use the synchronous matcher with the async session
     match_rows = await db.run_sync(lambda sync_db: run_matching(sid, sync_db))

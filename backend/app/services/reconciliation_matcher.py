@@ -124,7 +124,9 @@ def run_matching(session_id: uuid.UUID, db: Session) -> List[ReconciliationMatch
 
     # ── Delete existing matches ───────────────────────────────────────────────
     db.execute(
-        delete(ReconciliationMatch).where(ReconciliationMatch.session_id == session_id)
+        delete(ReconciliationMatch)
+        .where(ReconciliationMatch.session_id == session_id)
+        .execution_options(synchronize_session=False)
     )
     db.flush()
 
