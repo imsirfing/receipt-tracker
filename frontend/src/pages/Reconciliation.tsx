@@ -415,7 +415,7 @@ export default function ReconciliationPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-1">Upload Statements</h2>
           <p className="text-sm text-slate-500 mb-1">
-            Upload PDF statements covering{" "}
+            Upload PDF or CSV statements covering{" "}
             <strong>
               {session.date_from} – {session.date_to}
             </strong>
@@ -435,13 +435,13 @@ export default function ReconciliationPage() {
           >
             <div className="text-3xl mb-2">📄</div>
             <div className="text-sm text-slate-600 font-medium">
-              Drag &amp; drop PDFs here or click to browse
+              Drag &amp; drop PDFs or CSVs here or click to browse
             </div>
             <div className="text-xs text-slate-400 mt-1">Bank &amp; credit card statements</div>
             <input
               ref={fileInputRef}
               type="file"
-              accept="application/pdf"
+              accept="application/pdf,.csv,text/csv"
               multiple
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}

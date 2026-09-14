@@ -19,7 +19,7 @@ from app.models.receipt import (
     StatementTransaction,
 )
 from app.services.reconciliation_matcher import run_matching
-from app.services.statement_parser import StatementParser
+from app.services.statement_parser import StatementParser, parse_csv_statement
 
 router = APIRouter(prefix="/api/reconciliation", tags=["reconciliation"])
 
@@ -275,11 +275,15 @@ async def upload_statement(
     if session_obj is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    pdf_bytes = await statement.read()
+    file_bytes = await statement.read()
+    filename = statement.filename or ""
 
-    # Parse the statement
-    parser = StatementParser()
-    extraction = parser.parse(pdf_bytes)
+    # Route to CSV parser or LLM PDF parser based on file type
+    if filename.lower().endswith(".csv") or (statement.content_type or "").startswith("text/"):
+        extraction = parse_csv_statement(file_bytes, filename=filename)
+    else:
+        parser = StatementParser()
+        extraction = parser.parse(file_bytes)
 
     label = account_label or extraction.account_label
     now = datetime.now(timezone.utc)

@@ -6,8 +6,12 @@ Calls Claude with a structured tool schema and returns a validated
 from __future__ import annotations
 
 import base64
+import csv
+import io
 import os
-from typing import List
+import re
+from datetime import datetime
+from typing import List, Optional
 
 from anthropic import Anthropic
 from pydantic import BaseModel
@@ -87,6 +91,126 @@ RECORD_TOOL = {
         "required": ["account_label", "account_type", "transactions"],
     },
 }
+
+
+def _parse_amount(raw: str) -> Optional[float]:
+    """Strip currency symbols/commas and return float, or None if unparseable."""
+    cleaned = re.sub(r"[^\d.\-]", "", raw.strip())
+    try:
+        return abs(float(cleaned)) if cleaned else None
+    except ValueError:
+        return None
+
+
+def _parse_date(raw: str) -> Optional[str]:
+    """Try common date formats and return YYYY-MM-DD, or None."""
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y", "%m/%d/%y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(raw.strip(), fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def parse_csv_statement(
+    csv_bytes: bytes,
+    filename: str = "",
+) -> StatementExtractionResult:
+    """Parse Chase (and compatible) CSV exports without needing an LLM.
+
+    Chase CC CSV columns (typical):
+        Transaction Date, Post Date, Description, Category, Type, Amount, Memo
+
+    Chase Bank CSV columns (typical):
+        Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #
+
+    Amount conventions:
+        CC  — negative = purchase (debit), positive = credit/refund
+        Bank — positive = deposit (credit), negative = withdrawal (debit)
+    """
+    text = csv_bytes.decode("utf-8-sig", errors="replace")  # handle BOM
+    reader = csv.DictReader(io.StringIO(text))
+    headers = [h.strip().lower() for h in (reader.fieldnames or [])]
+
+    # Detect Chase CC vs Chase Bank by column presence
+    is_cc = "transaction date" in headers
+    is_bank = "posting date" in headers and not is_cc
+
+    # Infer account label from filename (e.g. Chase5015 → ...5015)
+    last4_match = re.search(r"(\d{4})", filename)
+    last4 = last4_match.group(1) if last4_match else "????"
+    if is_bank:
+        account_label = f"Chase Checking ...{last4}"
+        account_type = "bank"
+    else:
+        account_label = f"Chase ...{last4}"
+        account_type = "cc"
+
+    transactions: List[StatementTransactionExtraction] = []
+
+    for row in reader:
+        row_clean = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+
+        if is_cc:
+            date_str = _parse_date(row_clean.get("transaction date", ""))
+            payee = row_clean.get("description", "").strip()
+            raw_amt = row_clean.get("amount", "0")
+            try:
+                amt_signed = float(re.sub(r"[^\d.\-]", "", raw_amt))
+            except ValueError:
+                continue
+            # Chase CC: negative = purchase, positive = credit
+            is_credit = amt_signed > 0
+            amount = abs(amt_signed)
+        elif is_bank:
+            date_str = _parse_date(row_clean.get("posting date", ""))
+            payee = row_clean.get("description", "").strip()
+            raw_amt = row_clean.get("amount", "0")
+            try:
+                amt_signed = float(re.sub(r"[^\d.\-]", "", raw_amt))
+            except ValueError:
+                continue
+            # Chase Bank: positive = deposit (credit in), negative = debit/withdrawal
+            is_credit = amt_signed > 0
+            amount = abs(amt_signed)
+        else:
+            # Generic fallback: look for date/description/amount columns
+            date_str = None
+            for col in ("date", "transaction date", "posting date"):
+                if col in row_clean:
+                    date_str = _parse_date(row_clean[col])
+                    break
+            payee = ""
+            for col in ("description", "payee", "memo", "details"):
+                if col in row_clean and row_clean[col]:
+                    payee = row_clean[col]
+                    break
+            raw_amt = ""
+            for col in ("amount", "debit", "credit"):
+                if col in row_clean and row_clean[col]:
+                    raw_amt = row_clean[col]
+                    break
+            amt = _parse_amount(raw_amt)
+            if amt is None:
+                continue
+            amount = amt
+            is_credit = False
+
+        if not date_str or not payee or amount == 0:
+            continue
+
+        transactions.append(StatementTransactionExtraction(
+            date=date_str,
+            payee_raw=payee,
+            amount=amount,
+            is_credit=is_credit,
+        ))
+
+    return StatementExtractionResult(
+        account_label=account_label,
+        account_type=account_type,
+        transactions=transactions,
+    )
 
 
 class StatementParser:
