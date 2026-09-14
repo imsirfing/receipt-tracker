@@ -297,7 +297,7 @@ async def upload_statement(
             account_label=label,
             account_type=extraction.account_type,
             date=txn_date,
-            payee_raw=t.payee_raw,
+            payee_raw=t.payee_raw[:1000],  # guard against unexpectedly long descriptions
             amount=t.amount,
             is_credit=t.is_credit,
             excluded=False,

@@ -256,7 +256,7 @@ class StatementTransaction(Base):
     account_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     account_type: Mapped[str] = mapped_column(String(10), nullable=False)  # cc | bank
     date: Mapped[date] = mapped_column(Date, nullable=False)
-    payee_raw: Mapped[str] = mapped_column(String(255), nullable=False)
+    payee_raw: Mapped[str] = mapped_column(Text, nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     is_credit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     excluded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
