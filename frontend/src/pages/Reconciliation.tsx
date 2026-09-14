@@ -5,7 +5,7 @@ import {
   ReconciliationSession,
   createReconciliationSession,
   exportReconciliationSession,
-  listReceipts,
+  listReceiptCategories,
   listReconciliationMatches,
   patchReconciliationMatch,
   uploadStatement,
@@ -201,12 +201,9 @@ export default function ReconciliationPage() {
 
   // Load categories from existing receipts
   useEffect(() => {
-    listReceipts(1000, 0)
-      .then((res) => {
-        const cats = Array.from(new Set(res.items.map((r) => r.category_variable))).sort();
-        setCategories(cats);
-      })
-      .catch(() => {});
+    listReceiptCategories()
+      .then((cats) => setCategories(cats))
+      .catch(() => setError("Failed to load categories. Please refresh."));
   }, []);
 
   // ── Step 1: Create session ────────────────────────────────────────────────

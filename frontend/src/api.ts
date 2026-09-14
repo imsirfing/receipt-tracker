@@ -749,6 +749,11 @@ export const getLinkedReceipts = async (receiptId: string): Promise<LinkedReceip
   return res.data;
 };
 
+export const listReceiptCategories = async (): Promise<string[]> => {
+  const res = await api.get<string[]>("/api/receipts/categories");
+  return res.data;
+};
+
 // ── Reconciliation ────────────────────────────────────────────────────────────
 
 export interface ReconciliationSession {

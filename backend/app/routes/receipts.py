@@ -131,6 +131,25 @@ async def list_receipts(
     return ReceiptListOut(items=receipts, total=total, total_amount=total_amount, limit=limit, offset=offset)
 
 
+@router.get("/categories")
+async def list_categories(
+    db: AsyncSession = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return distinct category_variable values visible to the current user, sorted."""
+    stmt = select(Receipt.category_variable).where(
+        Receipt.deleted_at.is_(None),
+        Receipt.category_variable.isnot(None),
+    )
+    if not current_user["is_owner"]:
+        allowed = current_user.get("access_categories", [])
+        if "all" not in allowed:
+            stmt = stmt.where(Receipt.category_variable.in_(allowed))
+    stmt = stmt.distinct().order_by(Receipt.category_variable)
+    result = await db.execute(stmt)
+    return [row[0] for row in result.fetchall()]
+
+
 @router.get("/export")
 async def export_receipts_csv(
     session: AsyncSession = Depends(get_session),
