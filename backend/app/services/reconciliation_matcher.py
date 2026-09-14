@@ -182,6 +182,49 @@ def run_matching(session_id: uuid.UUID, db: Session) -> List[ReconciliationMatch
             )
             match_rows.append(row)
 
+    # ── Second pass: already-reimbursed detection ───────────────────────────
+    # For unmatched charges, check if they correspond to already-reimbursed
+    # receipts in the same category/date window.  These create informational
+    # "pre_reimbursed" rows and do NOT affect the regular matching pool.
+    reimbursed_receipts: List[Receipt] = list(
+        db.execute(
+            select(Receipt).where(
+                Receipt.category_variable == recon_session.category_variable,
+                Receipt.is_reimbursed == True,  # noqa: E712
+                Receipt.deleted_at.is_(None),
+                Receipt.date >= recon_session.date_from,
+                Receipt.date <= recon_session.date_to,
+            )
+        ).scalars().all()
+    )
+
+    for txn in txns:
+        if txn.id in matched_txn_ids:
+            continue
+        best_conf: Optional[str] = None
+        best_reimbursed: Optional[Receipt] = None
+        for r_reimb in reimbursed_receipts:
+            conf = _confidence(r_reimb, txn)
+            if conf is not None:
+                if best_conf is None or _CONFIDENCE_RANK[conf] > _CONFIDENCE_RANK[best_conf]:
+                    best_conf = conf
+                    best_reimbursed = r_reimb
+        if best_conf is not None and best_reimbursed is not None:
+            delta = round(float(best_reimbursed.amount) - float(txn.amount), 2)
+            row = ReconciliationMatch(
+                id=uuid.uuid4(),
+                session_id=session_id,
+                receipt_id=best_reimbursed.id,
+                statement_transaction_id=txn.id,
+                status="pre_reimbursed",
+                confidence=best_conf,
+                amount_delta=delta,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+            match_rows.append(row)
+            matched_txn_ids.add(txn.id)  # exclude from unmatched-charges section
+
     # Unmatched statement transactions
     for txn in txns:
         if txn.id not in matched_txn_ids:

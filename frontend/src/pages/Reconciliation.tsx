@@ -7,6 +7,7 @@ import {
   exportReconciliationSession,
   listReceiptCategories,
   listReconciliationMatches,
+  manualPairMatches,
   patchReconciliationMatch,
   uploadStatement,
 } from "../api";
@@ -88,20 +89,32 @@ function MatchRow({
   match,
   onConfirm,
   onDismiss,
+  onPair,
+  onPairWith,
+  isPendingSource,
+  showPairWithButton,
 }: {
   match: ReconciliationMatch;
   onConfirm: (id: string) => void;
   onDismiss: (id: string) => void;
+  onPair?: (id: string) => void;
+  onPairWith?: (id: string) => void;
+  isPendingSource?: boolean;
+  showPairWithButton?: boolean;
 }) {
   const r = match.receipt;
   const t = match.statement_transaction;
   const isDismissed = match.status === "dismissed";
   const isConfirmed = match.status === "confirmed";
 
+  const rowBg = isPendingSource
+    ? "bg-amber-50 border border-amber-200"
+    : "border-b border-slate-100";
+
   return (
-    <tr className={`border-b border-slate-100 ${isDismissed ? "opacity-40" : ""}`}>
+    <tr className={isDismissed ? "opacity-40" : ""}>
       {/* Receipt side */}
-      <td className="py-3 pr-3 align-top min-w-[180px]">
+      <td className={`py-3 pr-3 align-top min-w-[180px] ${rowBg}`}>
         {r ? (
           <div>
             <div className="text-sm font-medium text-slate-800">{r.payee}</div>
@@ -117,7 +130,7 @@ function MatchRow({
       </td>
 
       {/* Confidence arrow */}
-      <td className="py-3 px-2 text-center align-middle">
+      <td className={`py-3 px-2 text-center align-middle ${rowBg}`}>
         {r && t ? (
           <div className="flex flex-col items-center gap-1">
             <span className="text-slate-300 text-lg">↔</span>
@@ -132,7 +145,7 @@ function MatchRow({
       </td>
 
       {/* Statement side */}
-      <td className="py-3 pl-3 align-top min-w-[180px]">
+      <td className={`py-3 pl-3 align-top min-w-[180px] ${rowBg}`}>
         {t ? (
           <div>
             <div className="text-sm font-medium text-slate-800 truncate max-w-[200px]">{t.payee_raw}</div>
@@ -148,13 +161,29 @@ function MatchRow({
       </td>
 
       {/* Actions */}
-      <td className="py-3 pl-4 align-middle whitespace-nowrap">
+      <td className={`py-3 pl-4 align-middle whitespace-nowrap ${rowBg}`}>
         {isConfirmed ? (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
             ✓ Confirmed
           </span>
         ) : isDismissed ? (
           <span className="text-xs text-slate-400">Dismissed</span>
+        ) : isPendingSource ? (
+          // This row is the one waiting to be paired — show cancel
+          <button
+            onClick={() => onPair?.("")}  // empty string signals cancel
+            className="px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-200 transition-colors"
+          >
+            Cancel
+          </button>
+        ) : showPairWithButton ? (
+          // pairing mode active, this is a candidate charge — show "Pair with this"
+          <button
+            onClick={() => onPairWith?.(match.id)}
+            className="px-2.5 py-1 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Pair with this
+          </button>
         ) : (
           <div className="flex gap-2">
             {r && t && (
@@ -163,6 +192,24 @@ function MatchRow({
                 className="px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
               >
                 Confirm
+              </button>
+            )}
+            {onPair && !r?.id && !t && (
+              // unmatched receipt - show Pair button only when no pairing mode
+              <button
+                onClick={() => onPair(match.id)}
+                className="px-2.5 py-1 text-xs font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
+              >
+                Pair
+              </button>
+            )}
+            {onPair && r && !t && (
+              // unmatched receipt - show Pair button
+              <button
+                onClick={() => onPair(match.id)}
+                className="px-2.5 py-1 text-xs font-medium bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors"
+              >
+                Pair
               </button>
             )}
             <button
@@ -198,6 +245,7 @@ export default function ReconciliationPage() {
   // Step 3
   const [matches, setMatches] = useState<ReconciliationMatch[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [pendingPairId, setPendingPairId] = useState<string | null>(null);
 
   // Load categories from existing receipts
   useEffect(() => {
@@ -285,6 +333,32 @@ export default function ReconciliationPage() {
     }
   };
 
+  // ── Step 3: Manual pairing ────────────────────────────────────────────────
+
+  const handlePair = (matchId: string) => {
+    // empty string means cancel
+    if (!matchId) {
+      setPendingPairId(null);
+      return;
+    }
+    setPendingPairId(matchId);
+  };
+
+  const handlePairWith = async (chargeMatchId: string) => {
+    if (!session || !pendingPairId) return;
+    setError(null);
+    try {
+      const newMatch = await manualPairMatches(session.id, pendingPairId, chargeMatchId);
+      setMatches((prev) => [
+        ...prev.filter((m) => m.id !== pendingPairId && m.id !== chargeMatchId),
+        newMatch,
+      ]);
+      setPendingPairId(null);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   // ── Step 3: Review actions ────────────────────────────────────────────────
 
   const handleConfirm = async (matchId: string) => {
@@ -338,8 +412,12 @@ export default function ReconciliationPage() {
   };
 
   // ── Match grouping ────────────────────────────────────────────────────────
+  const preReimbursed = matches.filter((m) => m.status === "pre_reimbursed");
   const matchedPairs = matches.filter(
-    (m) => m.receipt !== null && m.statement_transaction !== null
+    (m) =>
+      m.receipt !== null &&
+      m.statement_transaction !== null &&
+      m.status !== "pre_reimbursed",
   );
   const unmatchedReceipts = matches.filter(
     (m) => m.receipt !== null && m.statement_transaction === null
@@ -559,20 +637,97 @@ export default function ReconciliationPage() {
             {unmatchedReceipts.length === 0 ? (
               <div className="px-5 py-6 text-sm text-slate-400 text-center">All receipts matched!</div>
             ) : (
-              <table className="w-full">
-                <tbody className="divide-y divide-slate-100">
-                  {unmatchedReceipts.map((m) => (
-                    <MatchRow
-                      key={m.id}
-                      match={m}
-                      onConfirm={handleConfirm}
-                      onDismiss={handleDismiss}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <>
+                {pendingPairId && (
+                  <div className="px-5 py-2 text-xs text-amber-700 bg-amber-50 border-b border-amber-200">
+                    ⚠️ Select an unmatched charge below to pair with the highlighted receipt, or click Cancel.
+                  </div>
+                )}
+                <table className="w-full">
+                  <tbody className="divide-y divide-slate-100">
+                    {unmatchedReceipts.map((m) => (
+                      <MatchRow
+                        key={m.id}
+                        match={m}
+                        onConfirm={handleConfirm}
+                        onDismiss={handleDismiss}
+                        onPair={handlePair}
+                        isPendingSource={pendingPairId === m.id}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
+
+          {/* Already Reimbursed */}
+          {preReimbursed.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                <span className="text-lg">✅</span>
+                <h2 className="text-base font-semibold text-slate-800">
+                  Already Reimbursed ({preReimbursed.length})
+                </h2>
+                <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  informational
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-xs text-slate-400 border-b border-slate-100">
+                      <th className="text-left px-5 py-2 font-medium">Reimbursed Receipt</th>
+                      <th className="text-center px-2 py-2 font-medium">Match</th>
+                      <th className="text-left px-3 py-2 font-medium">Statement Charge</th>
+                      <th className="text-left px-4 py-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {preReimbursed.map((m) => (
+                      <tr key={m.id} className="border-b border-slate-100 bg-emerald-50/40">
+                        <td className="py-3 pr-3 align-top min-w-[180px] px-5">
+                          {m.receipt ? (
+                            <div>
+                              <div className="text-sm font-medium text-slate-800">{m.receipt.payee}</div>
+                              <div className="text-xs text-slate-500">{m.receipt.date}</div>
+                              <div className="text-sm font-bold text-emerald-700 mt-0.5">{fmtCurrency(m.receipt.amount)}</div>
+                              {m.receipt.payment_category && (
+                                <div className="text-xs text-slate-400 mt-0.5">{m.receipt.payment_category}</div>
+                              )}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="py-3 px-2 text-center align-middle">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-emerald-400 text-lg">↔</span>
+                            <ConfidenceBadge confidence={m.confidence} />
+                          </div>
+                        </td>
+                        <td className="py-3 pl-3 align-top min-w-[180px]">
+                          {m.statement_transaction ? (
+                            <div>
+                              <div className="text-sm font-medium text-slate-800 truncate max-w-[200px]">{m.statement_transaction.payee_raw}</div>
+                              <div className="text-xs text-slate-500">{m.statement_transaction.date}</div>
+                              <div className="text-sm font-bold text-indigo-700 mt-0.5">{fmtCurrency(m.statement_transaction.amount)}</div>
+                              {m.statement_transaction.account_label && (
+                                <div className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">{m.statement_transaction.account_label}</div>
+                              )}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="py-3 pl-4 align-middle">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Reimbursed
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Unmatched charges */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -593,6 +748,8 @@ export default function ReconciliationPage() {
                       match={m}
                       onConfirm={handleConfirm}
                       onDismiss={handleDismiss}
+                      onPairWith={pendingPairId ? handlePairWith : undefined}
+                      showPairWithButton={!!pendingPairId}
                     />
                   ))}
                 </tbody>
@@ -616,7 +773,7 @@ export default function ReconciliationPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <h2 className="text-lg font-semibold text-slate-800 mb-5">Export Summary</h2>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
             {[
               { label: "Confirmed", value: confirmed, color: "text-green-700" },
               {
@@ -628,6 +785,11 @@ export default function ReconciliationPage() {
                 label: "Unmatched Charges",
                 value: unmatchedCharges.filter((m) => m.status !== "dismissed").length,
                 color: "text-red-700",
+              },
+              {
+                label: "Already Reimbursed",
+                value: preReimbursed.length,
+                color: "text-emerald-700",
               },
               {
                 label: "Total Receipts",

@@ -92,6 +92,11 @@ class MatchPatchBody(BaseModel):
     notes: Optional[str] = None
 
 
+class ManualMatchBody(BaseModel):
+    receipt_match_id: str
+    charge_match_id: str
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _session_out(s: ReconciliationSession) -> Dict[str, Any]:
@@ -375,6 +380,87 @@ async def patch_match(
     await db.commit()
     await db.refresh(match_obj)
     return _match_out(match_obj)
+
+
+@router.post("/sessions/{session_id}/manual-match", response_model=MatchOut)
+async def manual_match(
+    session_id: str,
+    body: ManualMatchBody,
+    db: AsyncSession = Depends(get_session),
+    _user: Any = Depends(get_current_user),
+):
+    sid = uuid.UUID(session_id)
+    receipt_mid = uuid.UUID(body.receipt_match_id)
+    charge_mid = uuid.UUID(body.charge_match_id)
+
+    # Load and validate the receipt-side match row
+    r_result = await db.execute(
+        select(ReconciliationMatch).where(
+            ReconciliationMatch.id == receipt_mid,
+            ReconciliationMatch.session_id == sid,
+        )
+    )
+    receipt_match = r_result.scalar_one_or_none()
+    if receipt_match is None:
+        raise HTTPException(status_code=404, detail="Receipt match row not found")
+    if receipt_match.receipt_id is None or receipt_match.statement_transaction_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="receipt_match_id must be an unmatched receipt row (receipt set, no charge)",
+        )
+
+    # Load and validate the charge-side match row
+    c_result = await db.execute(
+        select(ReconciliationMatch).where(
+            ReconciliationMatch.id == charge_mid,
+            ReconciliationMatch.session_id == sid,
+        )
+    )
+    charge_match = c_result.scalar_one_or_none()
+    if charge_match is None:
+        raise HTTPException(status_code=404, detail="Charge match row not found")
+    if charge_match.statement_transaction_id is None or charge_match.receipt_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="charge_match_id must be an unmatched charge row (charge set, no receipt)",
+        )
+
+    # Compute amount_delta
+    receipt_result = await db.execute(
+        select(Receipt).where(Receipt.id == receipt_match.receipt_id)
+    )
+    receipt_obj = receipt_result.scalar_one_or_none()
+
+    txn_result = await db.execute(
+        select(StatementTransaction).where(
+            StatementTransaction.id == charge_match.statement_transaction_id
+        )
+    )
+    txn_obj = txn_result.scalar_one_or_none()
+
+    amount_delta = None
+    if receipt_obj is not None and txn_obj is not None:
+        amount_delta = round(abs(float(receipt_obj.amount) - float(txn_obj.amount)), 2)
+
+    now = datetime.now(timezone.utc)
+    new_match = ReconciliationMatch(
+        id=uuid.uuid4(),
+        session_id=sid,
+        receipt_id=receipt_match.receipt_id,
+        statement_transaction_id=charge_match.statement_transaction_id,
+        status="confirmed",
+        confidence="manual",
+        amount_delta=amount_delta,
+        created_at=now,
+        updated_at=now,
+    )
+
+    await db.delete(receipt_match)
+    await db.delete(charge_match)
+    db.add(new_match)
+    await db.commit()
+    await db.refresh(new_match)
+    return _match_out(new_match)
 
 
 @router.get("/sessions/{session_id}/export")

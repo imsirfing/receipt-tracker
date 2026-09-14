@@ -879,3 +879,15 @@ export const exportReconciliationSession = async (sessionId: string): Promise<un
   const res = await api.get(`/api/reconciliation/sessions/${sessionId}/export`);
   return res.data;
 };
+
+export const manualPairMatches = async (
+  sessionId: string,
+  receiptMatchId: string,
+  chargeMatchId: string,
+): Promise<ReconciliationMatch> => {
+  const res = await api.post<ReconciliationMatch>(
+    `/api/reconciliation/sessions/${sessionId}/manual-match`,
+    { receipt_match_id: receiptMatchId, charge_match_id: chargeMatchId },
+  );
+  return res.data;
+};
