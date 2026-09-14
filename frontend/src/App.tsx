@@ -18,6 +18,7 @@ const PayeeNormalizerPage = lazy(() => import("./pages/PayeeNormalizer"));
 const CashBoxesPage = lazy(() => import("./pages/CashBoxes"));
 const CashBoxDetailPage = lazy(() => import("./pages/CashBoxDetail"));
 const DuplicateReviewPage = lazy(() => import("./pages/DuplicateReview"));
+const ReconciliationPage = lazy(() => import("./pages/Reconciliation"));
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/cash-boxes" element={<CashBoxesPage />} />
             <Route path="/cash-boxes/:id" element={<CashBoxDetailPage />} />
             <Route path="/duplicates" element={<DuplicateReviewPage />} />
+            <Route path="/reconciliation" element={<ReconciliationPage />} />
           </Route>
         </Routes>
       </Suspense>

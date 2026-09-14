@@ -748,3 +748,129 @@ export const getLinkedReceipts = async (receiptId: string): Promise<LinkedReceip
   const res = await api.get<LinkedReceipt[]>(`/api/receipts/${receiptId}/linked`);
   return res.data;
 };
+
+// ── Reconciliation ────────────────────────────────────────────────────────────
+
+export interface ReconciliationSession {
+  id: string;
+  category_variable: string;
+  date_from: string;
+  date_to: string;
+  receipt_count: number;
+  total_amount_cents: number;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReconciliationSessionDetail extends ReconciliationSession {
+  total_receipts: number;
+  matched: number;
+  unmatched_receipts: number;
+  unmatched_charges: number;
+  confirmed: number;
+}
+
+export interface ReconciliationReceiptSnippet {
+  id: string;
+  payee: string;
+  amount: number;
+  date: string;
+  payment_category: string | null;
+}
+
+export interface ReconciliationStatementTransaction {
+  id: string;
+  date: string;
+  payee_raw: string;
+  amount: number;
+  account_label: string | null;
+  account_type: string;
+}
+
+export interface ReconciliationMatch {
+  id: string;
+  session_id: string;
+  status: string;
+  confidence: string | null;
+  amount_delta: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  receipt: ReconciliationReceiptSnippet | null;
+  statement_transaction: ReconciliationStatementTransaction | null;
+}
+
+export interface UploadResult {
+  transactions_parsed: number;
+  matches_created: number;
+}
+
+export const listReconciliationSessions = async (): Promise<ReconciliationSession[]> => {
+  const res = await api.get<ReconciliationSession[]>("/api/reconciliation/sessions");
+  return res.data;
+};
+
+export const createReconciliationSession = async (
+  category_variable: string,
+): Promise<ReconciliationSession> => {
+  const res = await api.post<ReconciliationSession>("/api/reconciliation/sessions", {
+    category_variable,
+  });
+  return res.data;
+};
+
+export const getReconciliationSession = async (
+  sessionId: string,
+): Promise<ReconciliationSessionDetail> => {
+  const res = await api.get<ReconciliationSessionDetail>(
+    `/api/reconciliation/sessions/${sessionId}`,
+  );
+  return res.data;
+};
+
+export const uploadStatement = async (
+  sessionId: string,
+  file: File,
+  accountLabel?: string,
+): Promise<UploadResult> => {
+  const form = new FormData();
+  form.append("statement", file);
+  if (accountLabel) form.append("account_label", accountLabel);
+  const res = await api.post<UploadResult>(
+    `/api/reconciliation/sessions/${sessionId}/upload`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } },
+  );
+  return res.data;
+};
+
+export const listReconciliationMatches = async (
+  sessionId: string,
+  matchStatus?: string,
+): Promise<ReconciliationMatch[]> => {
+  const params = matchStatus ? { status: matchStatus } : {};
+  const res = await api.get<ReconciliationMatch[]>(
+    `/api/reconciliation/sessions/${sessionId}/matches`,
+    { params },
+  );
+  return res.data;
+};
+
+export const patchReconciliationMatch = async (
+  sessionId: string,
+  matchId: string,
+  patch: { status?: string; statement_transaction_id?: string; notes?: string },
+): Promise<ReconciliationMatch> => {
+  const res = await api.patch<ReconciliationMatch>(
+    `/api/reconciliation/sessions/${sessionId}/matches/${matchId}`,
+    patch,
+  );
+  return res.data;
+};
+
+export const exportReconciliationSession = async (sessionId: string): Promise<unknown> => {
+  const res = await api.get(`/api/reconciliation/sessions/${sessionId}/export`);
+  return res.data;
+};

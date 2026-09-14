@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BarChart3, ClipboardList, Copy, FileText, LogOut, MessageSquare, Receipt, RefreshCw, Search, ShieldCheck, Tag, Wallet } from "lucide-react";
+import { BarChart3, ClipboardList, Copy, FileText, GitCompare, LogOut, MessageSquare, Receipt, RefreshCw, Search, ShieldCheck, Tag, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth-context";
 import { triggerIngest, getIngestStatus, listPending, getMe, listDuplicateCandidates } from "../api";
@@ -11,6 +11,7 @@ const baseNav = [
   { to: "/review", label: "Review", icon: ClipboardList, writeOnly: false, ownerOnly: true },
   { to: "/receipts", label: "Receipts", icon: Receipt, writeOnly: false, ownerOnly: false },
   { to: "/reports", label: "Reports", icon: FileText, writeOnly: false, ownerOnly: false },
+  { to: "/reconciliation", label: "Reconcile", icon: GitCompare, writeOnly: false, ownerOnly: false },
   { to: "/chat", label: "Chat report", icon: MessageSquare, writeOnly: false, ownerOnly: false },
   { to: "/cash-boxes", label: "Cash Boxes", icon: Wallet, writeOnly: false, ownerOnly: false },
 ];

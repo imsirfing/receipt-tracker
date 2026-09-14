@@ -226,6 +226,77 @@ class DuplicateCandidate(Base):
     )
 
 
+class ReconciliationSession(Base):
+    __tablename__ = "reconciliation_session"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    category_variable: Mapped[str] = mapped_column(String(50), nullable=False)
+    date_from: Mapped[date] = mapped_column(Date, nullable=False)
+    date_to: Mapped[date] = mapped_column(Date, nullable=False)
+    receipt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_amount_cents: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="uploading", server_default="uploading")
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    statement_transactions: Mapped[List["StatementTransaction"]] = relationship(
+        "StatementTransaction", back_populates="session", cascade="all, delete-orphan", lazy="selectin"
+    )
+    matches: Mapped[List["ReconciliationMatch"]] = relationship(
+        "ReconciliationMatch", back_populates="session", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class StatementTransaction(Base):
+    __tablename__ = "statement_transaction"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reconciliation_session.id", ondelete="CASCADE"), nullable=False)
+    account_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    account_type: Mapped[str] = mapped_column(String(10), nullable=False)  # cc | bank
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    payee_raw: Mapped[str] = mapped_column(String(255), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    is_credit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    excluded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    session: Mapped["ReconciliationSession"] = relationship("ReconciliationSession", back_populates="statement_transactions")
+
+    __table_args__ = (
+        Index("idx_stmt_txn_session_id", "session_id"),
+    )
+
+
+class ReconciliationMatch(Base):
+    __tablename__ = "reconciliation_match"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("reconciliation_session.id", ondelete="CASCADE"), nullable=False)
+    receipt_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("receipts.id", ondelete="SET NULL"), nullable=True)
+    statement_transaction_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("statement_transaction.id", ondelete="CASCADE"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    confidence: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # high | medium | low | none
+    amount_delta: Mapped[Optional[float]] = mapped_column(Numeric(10, 2), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    session: Mapped["ReconciliationSession"] = relationship("ReconciliationSession", back_populates="matches")
+    receipt: Mapped[Optional["Receipt"]] = relationship("Receipt", foreign_keys=[receipt_id], lazy="selectin")
+    statement_transaction: Mapped[Optional["StatementTransaction"]] = relationship(
+        "StatementTransaction", foreign_keys=[statement_transaction_id], lazy="selectin"
+    )
+
+    __table_args__ = (
+        Index("idx_recon_match_session_id", "session_id"),
+        Index("idx_recon_match_receipt_id", "receipt_id"),
+        Index("idx_recon_match_stmt_txn_id", "statement_transaction_id"),
+        Index("idx_recon_match_status", "status"),
+    )
+
+
 class ReimbursementCredit(Base):
     __tablename__ = "reimbursement_credits"
 
