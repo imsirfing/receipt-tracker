@@ -164,7 +164,7 @@ async def create_session(
     db: AsyncSession = Depends(get_session),
     _user: Any = Depends(get_current_user),
 ):
-    # Find all non-deleted receipts in this category (regardless of reimbursement status)
+    # Date range and count: unreimbursed only (drives the "pull statements for this window" message)
     result = await db.execute(
         select(
             func.min(Receipt.date).label("date_from"),
@@ -172,6 +172,7 @@ async def create_session(
             func.count(Receipt.id).label("receipt_count"),
         ).where(
             Receipt.category_variable == body.category_variable,
+            Receipt.is_reimbursed == False,  # noqa: E712
             Receipt.deleted_at.is_(None),
         )
     )
@@ -180,13 +181,14 @@ async def create_session(
     if row.receipt_count == 0 or row.date_from is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No receipts found for category '{body.category_variable}'",
+            detail=f"No unreimbursed receipts found for category '{body.category_variable}'",
         )
 
-    # Compute total_amount_cents
+    # Total amount: unreimbursed only
     amount_result = await db.execute(
         select(Receipt.amount).where(
             Receipt.category_variable == body.category_variable,
+            Receipt.is_reimbursed == False,  # noqa: E712
             Receipt.deleted_at.is_(None),
         )
     )
