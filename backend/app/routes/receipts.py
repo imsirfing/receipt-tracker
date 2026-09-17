@@ -102,7 +102,11 @@ async def list_receipts(
         stmt = stmt.where(Receipt.category_variable == category)
     if is_reimbursed is not None:
         stmt = stmt.where(Receipt.is_reimbursed.is_(is_reimbursed))
-    if reimbursement_status is not None:
+    if reimbursement_status == "none":
+        stmt = stmt.where(
+            or_(Receipt.reimbursement_status == "none", Receipt.reimbursement_status.is_(None))
+        )
+    elif reimbursement_status is not None:
         stmt = stmt.where(Receipt.reimbursement_status == reimbursement_status)
     if search is not None and search.strip():
         term = f"%{search.strip()}%"
