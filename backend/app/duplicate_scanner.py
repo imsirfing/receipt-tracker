@@ -160,20 +160,57 @@ def _date_delta(a: Receipt, b: Receipt) -> int:
         return 999
 
 
+# Invoice numbers that are too generic to be useful identifiers on their own.
+# Many vendors emit these; matching on them alone causes false positives.
+_GENERIC_INVOICE_NUMBERS = frozenset({
+    "0", "1", "00", "01", "001", "0001", "00001",
+    "n/a", "na", "none", "null", "unknown", "-", "invoice",
+})
+
+# Maximum day gap between two receipts for an invoice-number match to be meaningful.
+_INVOICE_DATE_WINDOW_DAYS = 365
+
+
 def _classify_pair(
     a: Receipt, b: Receipt
 ) -> tuple[Optional[str], Optional[str]]:
     """Return (match_reason, confidence) or (None, None) if no match."""
 
     # ── Invoice-number match ────────────────────────────────────────────────
+    # Requirements for a valid invoice-number duplicate:
+    #   1. Both invoice numbers are non-empty and non-generic.
+    #   2. Same canonical payee (different vendors sharing an invoice number is noise).
+    #   3. Same amount (different amounts on the same invoice → credit memo / partial,
+    #      not a true duplicate).
+    #   4. Date within a rolling window (vendors that reuse sequential numbers across
+    #      years should not be flagged).
     inv_a = (a.invoice_number or "").strip()
     inv_b = (b.invoice_number or "").strip()
-    if inv_a and inv_b and inv_a.lower() == inv_b.lower():
+    if (
+        inv_a
+        and inv_b
+        and inv_a.lower() == inv_b.lower()
+        and inv_a.lower() not in _GENERIC_INVOICE_NUMBERS
+    ):
         payee_a = (a.canonical_payee or a.payee or "").lower()
         payee_b = (b.canonical_payee or b.payee or "").lower()
-        if payee_a and payee_b and payee_a == payee_b:
+        same_payee = bool(payee_a and payee_b and payee_a == payee_b)
+        same_amount = _normalize_amount(a.amount) == _normalize_amount(b.amount)
+        days = _date_delta(a, b)
+
+        if same_payee and same_amount and days <= _INVOICE_DATE_WINDOW_DAYS:
+            # Tight match: same vendor, same amount, same invoice, close in time.
             return "invoice_number", "high"
-        return "invoice_number", "medium"
+
+        if same_payee and days <= _INVOICE_DATE_WINDOW_DAYS:
+            # Same vendor + invoice number within the window, but amounts differ.
+            # Could be a re-send of a corrected invoice — flag at low confidence
+            # so James can decide, but don't cry wolf.
+            return "invoice_number", "low"
+
+        # Different payees sharing an invoice number is almost always noise —
+        # skip it entirely rather than generating a false positive.
+        return None, None
 
     # ── Amount + payee + date window ────────────────────────────────────────
     if _normalize_amount(a.amount) == _normalize_amount(b.amount):
